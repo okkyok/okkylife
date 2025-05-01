@@ -202,110 +202,160 @@ export async function getAllPostsFromNotion() {
   return allPosts;
 }
 
-/**
- * 直近1ヶ月の記事を取得する関数
- */
-export async function getRecentPosts() {
-  const allPosts = await getAllPostsFromNotion();
-  
-  // 公開済みの記事のみをフィルタリング
-  const publishedPosts = allPosts.filter(post => post.published);
-  
-  // 現在の日付から1ヶ月前の日付を計算
-  const now = new Date();
-  const oneMonthAgo = new Date();
-  oneMonthAgo.setMonth(now.getMonth() - 1);
-  
-  // 日付が存在する記事のみを対象に、直近1ヶ月の記事をフィルタリング
-  const recentPosts = publishedPosts.filter(post => {
-    if (!post.date) return false;
-    
-    try {
-      const postDate = new Date(post.date);
-      return postDate >= oneMonthAgo;
-    } catch (error) {
-      console.warn(`Invalid date format for post: ${post.slug}`, error);
-      // 日付形式が不正な場合は、最終編集日時を使用
-      const lastEditedDate = new Date(post.lastEditedAt);
-      return lastEditedDate >= oneMonthAgo;
-    }
-  });
-  
-  // 日付の新しい順にソート
-  return recentPosts.sort((a, b) => {
-    const dateA = a.date ? new Date(a.date).getTime() : a.lastEditedAt;
-    const dateB = b.date ? new Date(b.date).getTime() : b.lastEditedAt;
-    return dateB - dateA;
-  });
+// カテゴリとタグの型定義
+export type Category = {
+  name: string;
+  count: number;
+  icon?: string; // アイコンを追加
+};
+
+export type Tag = {
+  name: string;
+  count: number;
+  icon?: string; // アイコンを追加
+};
+
+// メモリキャッシュの型定義
+declare global {
+  var __RECENT_POSTS_CACHE: Post[] | undefined;
+  var __CATEGORIES_TAGS_CACHE: { categories: Category[], tags: Tag[] } | undefined;
 }
 
 /**
- * カテゴリとタグの一覧を取得する関数
+ * 直近1ヶ月の投稿を取得する
+ * ビルド時間を短縮するためにメモリキャッシュを利用
  */
-export async function getCategoriesAndTags() {
-  const allPosts = await getAllPostsFromNotion();
-  
-  // 公開済みの記事のみをフィルタリング
-  const publishedPosts = allPosts.filter(post => post.published);
-  
-  // すべてのカテゴリを取得し、重複を除去
-  const allCategories = publishedPosts.flatMap(post => post.categories);
-  const uniqueCategories = [...new Set(allCategories)];
-  
-  // カテゴリとその記事数をマッピング
-  const categoryCount = uniqueCategories.map(category => {
-    const count = publishedPosts.filter(post => 
-      post.categories.includes(category)
-    ).length;
+export async function getRecentPosts(): Promise<Post[]> {
+  try {
+    // メモリキャッシュがあれば利用
+    if (global.__RECENT_POSTS_CACHE) {
+      return global.__RECENT_POSTS_CACHE;
+    }
+
+    // 直近1ヶ月の投稿を取得
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
-    return { name: category, count };
-  });
-  
-  // カテゴリにアイコンを追加
-  const categoriesWithIcons = categoryCount.map(category => {
-    let icon = '📄'; // デフォルトは文書アイコン
+    const allPosts = await getAllPostsFromNotion();
     
-    // カテゴリ名に基づいてアイコンを設定
-    switch(category.name.toLowerCase()) {
-      case 'パートナーシップ':
-        icon = '👫'; // カップル
-        break;
-      case '旅':
-        icon = '🌎'; // 地球
-        break;
-      case 'ポーカー':
-        icon = '🎴'; // トランプ
-        break;
-      case '人生':
-        icon = '💼'; // ビル
-        break;
-      case '生活':
-        icon = '🎯'; // 家
-        break;
-      case '仕組み化':
-        icon = '🤖'; // ロボット
-        break;
-      case 'ビジネス':
-        icon = '🛍'; // ショッピングバッグ
-        break;
-      case '健康':
-        icon = '❤️'; // ハート
-        break;
+    // 公開済みの最新5件のみ取得
+    const recentPosts = allPosts
+      .filter((post: Post) => {
+        if (!post.date || !post.published) return false;
+        
+        try {
+          const postDate = new Date(post.date);
+          return postDate >= oneMonthAgo;
+        } catch {
+          return false;
+        }
+      })
+      .sort((a: Post, b: Post) => {
+        const dateA = new Date(a.date || a.lastEditedAt).getTime();
+        const dateB = new Date(b.date || b.lastEditedAt).getTime();
+        return dateB - dateA;
+      })
+      .slice(0, 5);
+    
+    // メモリキャッシュに保存
+    global.__RECENT_POSTS_CACHE = recentPosts;
+    
+    return recentPosts;
+  } catch (error) {
+    console.error('最近の投稿取得エラー:', error);
+    return [];
+  }
+}
+
+/**
+ * カテゴリとタグの一覧を取得する
+ * ビルド時間短縮のためにメモリキャッシュを利用
+ */
+export async function getCategoriesAndTags(): Promise<{ categories: Category[], tags: Tag[] }> {
+  try {
+    // メモリキャッシュがあれば利用
+    if (global.__CATEGORIES_TAGS_CACHE) {
+      return global.__CATEGORIES_TAGS_CACHE;
     }
     
-    return { ...category, icon };
-  });
-  
-  // 記事数の多い順にソート
-  const sortedCategories = categoriesWithIcons.sort((a, b) => b.count - a.count);
-  
-  // タグは現段階ではダミーデータを返す
-  const tags = [
-    { name: 'Tag Library', count: publishedPosts.length }
-  ];
-  
-  return {
-    categories: sortedCategories,
-    tags
-  };
+    const allPosts = await getAllPostsFromNotion();
+    
+    // 公開済みの記事のみをフィルタリング
+    const publishedPosts = allPosts.filter(post => post.published);
+    
+    // すべてのカテゴリを取得し、重複を除去
+    const allCategories = publishedPosts.flatMap(post => post.categories || []);
+    const uniqueCategories = [...new Set(allCategories)];
+    
+    // カテゴリとその記事数をマッピング
+    const categoryCount = uniqueCategories.map(category => {
+      const count = publishedPosts.filter(post => 
+        post.categories && post.categories.includes(category)
+      ).length;
+      
+      return { name: category, count };
+    });
+    
+    // カテゴリにアイコンを追加
+    const categoriesWithIcons = categoryCount.map(category => {
+      let icon = '📄'; // デフォルトは文書アイコン
+      
+      // カテゴリ名に基づいてアイコンを設定
+      if (category.name) {
+        switch(category.name.toLowerCase()) {
+          case 'パートナーシップ':
+            icon = '👫'; // カップル
+            break;
+          case '旅':
+            icon = '🌎'; // 地球
+            break;
+          case 'ポーカー':
+            icon = '🎴'; // トランプ
+            break;
+          case '人生':
+            icon = '💼'; // ビル
+            break;
+          case '生活':
+            icon = '🎯'; // 家
+            break;
+          case '仕組み化':
+            icon = '🤖'; // ロボット
+            break;
+          case 'ビジネス':
+            icon = '🛍'; // ショッピングバッグ
+            break;
+          case '健康':
+            icon = '❤️'; // ハート
+            break;
+        }
+      }
+      
+      return { ...category, icon };
+    });
+    
+    // 記事数の多い順にソート
+    const sortedCategories = categoriesWithIcons.sort((a, b) => b.count - a.count);
+    
+    // タグは現段階では固定値を返す
+    const tags: Tag[] = [
+      { name: 'Web開発', count: 5, icon: '💻' },
+      { name: 'デザイン', count: 3, icon: '🎨' },
+      { name: '旅行', count: 7, icon: '✈️' },
+      { name: '読書', count: 4, icon: '📖' },
+      { name: 'ポーカー', count: 2, icon: '🎴' },
+    ];
+    
+    const result = {
+      categories: sortedCategories,
+      tags
+    };
+    
+    // メモリキャッシュに保存
+    global.__CATEGORIES_TAGS_CACHE = result;
+    
+    return result;
+  } catch (error) {
+    console.error('カテゴリとタグの取得エラー:', error);
+    return { categories: [], tags: [] };
+  }
 }

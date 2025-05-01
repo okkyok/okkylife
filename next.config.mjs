@@ -11,18 +11,8 @@ const __dirname = path.dirname(__filename);
 const nextConfig = {
   // 最新のNext.js設定を使用
   experimental: {
-    // appDir: true, // Next.js 13以降ではデフォルトで有効
-    // ビルド高速化のための設定
-    optimizeCss: true, // CSSの最適化
-    turbotrace: {
-      logLevel: 'error',
-      logAll: false,
-    },
-    // ビルドキャッシュを最大限活用
-    incrementalCacheHandlerPath: path.resolve(__dirname, './src/cache/cache-handler.cjs'),
-    isrMemoryCacheSize: 0, // ディスクキャッシュを優先
-    // 並列処理の最適化
-    cpus: Math.max(1, Math.min(4, os.cpus().length / 2)), // 使用CPUコア数を制限
+    // 実験的機能を最小限にしてビルドを高速化
+    // optimizeCssとturbotraceはビルド時間が長くなる可能性があるので無効化
   },
 
   // 画像最適化
@@ -46,7 +36,7 @@ const nextConfig = {
   },
 
   // ビルド時間の制限
-  staticPageGenerationTimeout: 120, // 2分に短縮（長すぎるとタイムアウトする可能性）
+  staticPageGenerationTimeout: 60, // 1分に短縮（タイムアウトを防止）
   
   // メモリ使用量の最適化
   onDemandEntries: {
@@ -59,30 +49,8 @@ const nextConfig = {
   compress: true, // 圧縮を有効化
   productionBrowserSourceMaps: false, // 本番環境でのソースマップを無効化
 
-  // webpack設定
+  // webpack設定 - ビルド時間短縮のために最小限の設定にする
   webpack: (config, { webpack, isServer }) => {
-    // メモリ最適化
-    config.optimization = {
-      ...config.optimization,
-      nodeEnv: 'production',
-      minimize: true,
-      // チャンク最適化
-      splitChunks: {
-        chunks: 'all',
-        cacheGroups: {
-          default: false,
-          vendors: false,
-          // 共通モジュールを分離
-          commons: {
-            name: 'commons',
-            chunks: 'all',
-            minChunks: 2,
-            reuseExistingChunk: true,
-          },
-        },
-      },
-    };
-    
     // 不要な警告を抑制
     config.plugins.push(
       new webpack.ContextReplacementPlugin(/\/keyv\//, (data) => {
@@ -91,21 +59,8 @@ const nextConfig = {
       })
     );
 
-    // 画像処理の最適化
-    if (!isServer) {
-      // クライアントサイドでの画像処理を最適化
-      config.module.rules.push({
-        test: /\.(jpe?g|png|svg|gif|webp)$/i,
-        use: [
-          {
-            loader: 'image-webpack-loader',
-            options: {
-              disable: process.env.NODE_ENV !== 'production',
-            },
-          },
-        ],
-      });
-    }
+    // ビルド時間を短縮するために画像処理を無効化
+    // 画像処理はクライアントサイドで行う
 
     return config;
   },
