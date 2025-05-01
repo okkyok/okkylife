@@ -13,11 +13,9 @@ export default async function HomePage() {
   
   return (
     <div className="mt-12">
-      <h1 className="text-center text-3xl font-bold mb-8">愛をもって、人生を楽しみ尽くす</h1>
-      
       <div className="flex flex-col md:flex-row gap-8">
-        {/* 左半分: Aboutの内容 */}
-        <div className="md:w-1/2">
+        {/* 左側: Aboutの内容 (2/5) */}
+        <div className="md:w-2/5">
           <div className="mb-6 flex justify-center">
             <div className="relative w-48 h-48 rounded-full overflow-hidden border-4 border-gray-200 shadow-lg">
               <Image 
@@ -50,8 +48,8 @@ export default async function HomePage() {
           </div>
         </div>
         
-        {/* 右半分: 直近1ヶ月の新着記事 */}
-        <div className="md:w-1/2 border-t md:border-t-0 md:border-l border-gray-200 pt-6 md:pt-0 md:pl-8">
+        {/* 右側: 直近1ヶ月の新着記事 (3/5) */}
+        <div className="md:w-3/5 border-t md:border-t-0 md:border-l border-gray-200 pt-6 md:pt-0 md:pl-8">
           <h2 className="text-2xl font-bold mb-6 text-center">直近の記事</h2>
           
           {recentPosts.length > 0 ? (
