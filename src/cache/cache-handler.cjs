@@ -18,7 +18,7 @@ if (!fs.existsSync(CACHE_DIR)) {
 /**
  * キャッシュハンドラー
  */
-module.exports = class CustomCacheHandler {
+class CustomCacheHandler {
   constructor(options) {
     this.options = options || {};
     this.maxAge = this.options.maxAge || 7 * 24 * 60 * 60 * 1000; // 1週間
@@ -90,3 +90,6 @@ module.exports = class CustomCacheHandler {
     }
   }
 };
+
+// CommonJS形式でクラスをエクスポート
+module.exports = CustomCacheHandler;

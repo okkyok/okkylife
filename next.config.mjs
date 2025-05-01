@@ -1,4 +1,11 @@
 // @plaiceholderをインポートしない - ビルド時の画像処理を行わないため
+import { fileURLToPath } from 'url';
+import path from 'path';
+import os from 'os';
+
+// ES Moduleでのパス解決用ヘルパー
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -12,10 +19,10 @@ const nextConfig = {
       logAll: false,
     },
     // ビルドキャッシュを最大限活用
-    incrementalCacheHandlerPath: require.resolve('./src/cache/cache-handler.js'),
+    incrementalCacheHandlerPath: path.resolve(__dirname, './src/cache/cache-handler.cjs'),
     isrMemoryCacheSize: 0, // ディスクキャッシュを優先
     // 並列処理の最適化
-    cpus: Math.max(1, Math.min(4, require('os').cpus().length / 2)), // 使用CPUコア数を制限
+    cpus: Math.max(1, Math.min(4, os.cpus().length / 2)), // 使用CPUコア数を制限
   },
 
   // 画像最適化
@@ -104,4 +111,4 @@ const nextConfig = {
   },
 };
 
-export default withPlaiceholder(nextConfig)
+export default nextConfig;
