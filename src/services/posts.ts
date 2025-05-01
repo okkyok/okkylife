@@ -190,102 +190,12 @@ export async function getAllPostsFromNotion() {
     }
   });
 
-  // 空のカバー画像URLを持つ投稿をフィルタリングしてからぼかし画像を生成
-  const postsWithCover = allPosts.filter(post => post.cover);
-  
-  // 画像処理の並列実行を制限する関数
-  async function processImagesInBatches(items: Post[], batchSize = 3) {
-    // 処理対象がない場合は空配列を返す
-    if (!items || items.length === 0) {
-      return [];
-    }
-    
-    const results: Array<{ base64: string }> = [];
-    const resultMap = new Map<string, { base64: string }>(); // キャッシュ用マップ
-    
-    // バッチ処理で画像を処理
-    for (let i = 0; i < items.length; i += batchSize) {
-      const batch = items.slice(i, i + batchSize);
-      console.log(`画像バッチ処理: ${i + 1}〜${Math.min(i + batchSize, items.length)}/${items.length}`);
-      
-      try {
-        // 各バッチ内の画像を並列処理
-        const batchPromises = batch.map(post => {
-          // 無効なURLの場合はデフォルト値を返す
-          if (!post.cover) {
-            return Promise.resolve({ base64: '' });
-          }
-          
-          // 同じURLの画像があれば再利用
-          if (resultMap.has(post.cover)) {
-            return Promise.resolve(resultMap.get(post.cover));
-          }
-          
-          return getBlurImage(post.cover)
-            .then(result => {
-              // 成功した結果をキャッシュ
-              resultMap.set(post.cover, result);
-              return result;
-            })
-            .catch(error => {
-              console.error(`画像処理エラー (${post.slug}):`, error instanceof Error ? error.message : String(error));
-              // エラー時はデフォルト値を返す
-              const defaultResult = { base64: '' };
-              resultMap.set(post.cover, defaultResult);
-              return defaultResult;
-            });
-        });
-        
-        // 各バッチ内では順次処理してレート制限を回避
-        const batchResults: Array<{ base64: string }> = [];
-        for (const promise of batchPromises) {
-          try {
-            const result = await promise;
-            batchResults.push(result);
-            // 各画像処理間で少し待機
-            await new Promise(resolve => setTimeout(resolve, 100));
-          } catch (error) {
-            console.error('個別画像処理エラー:', error instanceof Error ? error.message : String(error));
-            batchResults.push({ base64: '' });
-          }
-        }
-        
-        results.push(...batchResults);
-      } catch (error) {
-        console.error('バッチ処理エラー:', error instanceof Error ? error.message : String(error));
-        // バッチ処理に失敗した場合、そのバッチには空の結果を入れる
-        results.push(...Array(batch.length).fill({ base64: '' }));
-      }
-      
-      // 各バッチ間で待機時間を長くして、レート制限を回避
-      if (i + batchSize < items.length) {
-        const waitTime = 500; // 500msに増やす
-        console.log(`バッチ間待機: ${waitTime}ms`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-    }
-    
-    return results;
-  }
-  
-  // バッチ処理で画像を処理（エラーハンドリング追加）
-  let blurImages: Array<{ base64: string }> = [];
-  try {
-    blurImages = await processImagesInBatches(postsWithCover);
-    console.log(`ぼかし画像生成完了: ${blurImages.length}枚`);
-  } catch (error) {
-    console.error('ぼかし画像バッチ処理に失敗しました:', error instanceof Error ? error.message : String(error));
-    // エラー時は空の配列を使用
-    blurImages = Array(postsWithCover.length).fill({ base64: '' });
-  }
-  
-  // ぼかし画像をポストに追加（カバー画像がある投稿のみ）
-  postsWithCover.forEach((post, i) => {
-    post.blurUrl = blurImages[i]?.base64 || '';
-  });
+  // ビルド時間を短縮するため、ビルド時の画像処理を行わない
+  // 必要な画像はクライアントサイドで遅延ロードする
   
   // カバー画像がない投稿にはデフォルトのぼかし画像URLを設定
-  allPosts.filter(post => !post.cover).forEach(post => {
+  allPosts.forEach(post => {
+    // ビルド時にはぼかし画像を生成せず、空文字列を設定
     post.blurUrl = '';
   });
 

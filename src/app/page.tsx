@@ -107,6 +107,9 @@ export default async function HomePage() {
                           style={{ objectFit: 'cover' }}
                           className="transition-transform group-hover:scale-105"
                           sizes="(max-width: 768px) 100vw, 50vw"
+                          loading="lazy"
+                          placeholder="blur"
+                          blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAEtAJJXIDTjwAAAABJRU5ErkJggg=="
                         />
                       </div>
                     )}
