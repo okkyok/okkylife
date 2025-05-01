@@ -10,23 +10,23 @@ import '@/styles/paginate.css';
 
 export const metadata = {
   title: {
-    default: 'Jihoo Kim',
-    template: '%s | Jihoo Kim',
+    default: '愛をもって、人生を楽しみ尽くす',
+    template: '%s | 愛をもって、人生を楽しみ尽くす',
   },
   metadataBase: new URL(process.env.SITE_URL || 'https://okkylife.com'),
-  description: 'Jihoo Kimの個人ブログです。プログラミングや日常について書いています。',
+  description: 'おっきーの個人ブログです。パートナーシップコーチとして、愛・旅・人生について書いています。',
   openGraph: {
-    title: 'Jihoo Kim',
-    description: 'Jihoo Kimの個人ブログ',
+    title: '愛をもって、人生を楽しみ尽くす',
+    description: 'おっきーの個人ブログ',
     url: process.env.SITE_URL,
-    siteName: 'Jihoo Kim',
+    siteName: '愛をもって、人生を楽しみ尽くす',
     locale: 'ja_JP',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Jihoo Kim',
-    description: 'Jihoo Kimの個人ブログ',
+    title: '愛をもって、人生を楽しみ尽くす',
+    description: 'おっきーの個人ブログ',
   },
 };
 
