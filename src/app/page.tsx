@@ -58,7 +58,7 @@ export default async function HomePage() {
                 {categories.map((category) => (
                   <li key={category.name} className="flex items-center">
                     <span className="mr-2">{category.icon}</span>
-                    <Link href={`/categories/${encodeURIComponent(category.name)}`} className="hover:text-blue-600 transition-colors flex-grow">
+                    <Link href={`/categories/${category.slug}`} className="hover:text-blue-600 transition-colors flex-grow">
                       {category.name}
                     </Link>
                     <span className="text-sm text-gray-500 ml-auto">{category.count}</span>
@@ -78,7 +78,7 @@ export default async function HomePage() {
                 {tags.map((tag) => (
                   <li key={tag.name} className="flex items-center">
                     <span className="mr-2">🏷️</span>
-                    <Link href={`/tags/${encodeURIComponent(tag.name)}`} className="hover:text-blue-600 transition-colors flex-grow">
+                    <Link href={`/tags/${tag.slug}`} className="hover:text-blue-600 transition-colors flex-grow">
                       {tag.name}
                     </Link>
                     <span className="text-sm text-gray-500 ml-auto">{tag.count}</span>

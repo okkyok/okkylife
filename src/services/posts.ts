@@ -241,12 +241,14 @@ export type Category = {
   name: string;
   count: number;
   icon?: string; // アイコンを追加
+  slug: string; // 英語のスラッグを追加
 };
 
 export type Tag = {
   name: string;
   count: number;
   icon?: string; // アイコンを追加
+  slug: string; // 英語のスラッグを追加
 };
 
 // メモリキャッシュの型定義
@@ -294,18 +296,29 @@ export async function getRecentPosts(): Promise<Post[]> {
 
 /**
  * カテゴリでフィルタリングした投稿を取得する
- * @param category フィルタリングするカテゴリ名
+ * @param categorySlug フィルタリングするカテゴリのスラッグ
  */
-export async function getPostsByCategory(category: string): Promise<Post[]> {
+export async function getPostsByCategory(categorySlug: string): Promise<Post[]> {
   try {
     const allPosts = await getAllPostsFromNotion();
+    const { categories } = await getCategoriesAndTags();
+    
+    // スラッグからカテゴリ名を取得
+    const categoryInfo = categories.find(c => c.slug === categorySlug);
+    
+    if (!categoryInfo) {
+      console.warn(`カテゴリスラッグ "${categorySlug}" に一致するカテゴリが見つかりません`);
+      return [];
+    }
+    
+    const categoryName = categoryInfo.name;
     
     // 公開済みで指定されたカテゴリの投稿のみをフィルタリング
     return allPosts
       .filter(post => 
         post.published && 
         post.categories && 
-        post.categories.includes(category)
+        post.categories.includes(categoryName)
       )
       .sort((a, b) => {
         const dateA = new Date(a.date || a.lastEditedAt).getTime();
@@ -313,7 +326,7 @@ export async function getPostsByCategory(category: string): Promise<Post[]> {
         return dateB - dateA;
       });
   } catch (error) {
-    console.error(`カテゴリ "${category}" の投稿取得エラー:`, error);
+    console.error(`カテゴリスラッグ "${categorySlug}" の投稿取得エラー:`, error);
     return [];
   }
 }
@@ -347,53 +360,69 @@ export async function getCategoriesAndTags(): Promise<{ categories: Category[], 
       return { name: category, count };
     });
     
-    // カテゴリにアイコンを追加
-    const categoriesWithIcons = categoryCount.map(category => {
+    // カテゴリにアイコンとスラッグを追加
+    const categoriesWithIconsAndSlugs = categoryCount.map(category => {
       let icon = '📄'; // デフォルトは文書アイコン
+      let slug = ''; // デフォルトは空文字列
       
-      // カテゴリ名に基づいてアイコンを設定
+      // カテゴリ名に基づいてアイコンとスラッグを設定
       if (category.name) {
         switch(category.name.toLowerCase()) {
           case 'パートナーシップ':
             icon = '👫'; // カップル
+            slug = 'partnership';
             break;
           case '旅':
             icon = '🌎'; // 地球
+            slug = 'travel';
             break;
           case 'ポーカー':
             icon = '🎴'; // トランプ
+            slug = 'poker';
             break;
           case '人生':
             icon = '💼'; // ビル
+            slug = 'life';
             break;
           case '生活':
             icon = '🎯'; // 家
+            slug = 'lifestyle';
             break;
           case '仕組み化':
             icon = '🤖'; // ロボット
+            slug = 'automation';
             break;
           case 'ビジネス':
             icon = '🛍'; // ショッピングバッグ
+            slug = 'business';
             break;
           case '健康':
             icon = '❤️'; // ハート
+            slug = 'health';
             break;
+          default:
+            // カテゴリ名をローマ字化して小文字に変換（簡易的な実装）
+            slug = category.name
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-') // 英数字以外をハイフンに
+              .replace(/^-|-$/g, ''); // 先頭と末尾のハイフンを削除
+            if (!slug) slug = `category-${Date.now()}`; // スラッグが空の場合
         }
       }
       
-      return { ...category, icon };
+      return { ...category, icon, slug };
     });
     
     // 記事数の多い順にソート
-    const sortedCategories = categoriesWithIcons.sort((a, b) => b.count - a.count);
+    const sortedCategories = categoriesWithIconsAndSlugs.sort((a, b) => b.count - a.count);
     
     // タグは現段階では固定値を返す
     const tags: Tag[] = [
-      { name: 'Web開発', count: 5, icon: '💻' },
-      { name: 'デザイン', count: 3, icon: '🎨' },
-      { name: '旅行', count: 7, icon: '✈️' },
-      { name: '読書', count: 4, icon: '📖' },
-      { name: 'ポーカー', count: 2, icon: '🎴' },
+      { name: 'Web開発', count: 5, icon: '💻', slug: 'web-development' },
+      { name: 'デザイン', count: 3, icon: '🎨', slug: 'design' },
+      { name: '旅行', count: 7, icon: '✈️', slug: 'travel' },
+      { name: '読書', count: 4, icon: '📖', slug: 'reading' },
+      { name: 'ポーカー', count: 2, icon: '🎴', slug: 'poker' },
     ];
     
     const result = {

@@ -4,21 +4,27 @@ import { getPostsByCategory, getCategoriesAndTags } from '@/services/posts';
 import { formatDate } from '@/utils/date';
 
 export async function generateMetadata({ params }: { params: { category: string } }) {
-  const decodedCategory = decodeURIComponent(params.category);
+  const categorySlug = params.category; // スラッグを取得
+  const { categories } = await getCategoriesAndTags();
+  
+  // スラッグからカテゴリ情報を取得
+  const categoryInfo = categories.find(c => c.slug === categorySlug);
+  const categoryName = categoryInfo?.name || categorySlug;
   
   return {
-    title: `${decodedCategory} | 愛をもって、人生を楽しみ尽くす`,
-    description: `${decodedCategory}に関する記事の一覧です。`,
+    title: `${categoryName} | 愛をもって、人生を楽しみ尽くす`,
+    description: `${categoryName}に関する記事の一覧です。`,
   };
 }
 
 export default async function CategoryPage({ params }: { params: { category: string } }) {
-  const decodedCategory = decodeURIComponent(params.category);
-  const posts = await getPostsByCategory(decodedCategory);
+  const categorySlug = params.category; // スラッグを取得
+  const posts = await getPostsByCategory(categorySlug);
   const { categories } = await getCategoriesAndTags();
   
-  // カテゴリのアイコンを取得
-  const categoryInfo = categories.find(c => c.name === decodedCategory);
+  // スラッグからカテゴリ情報を取得
+  const categoryInfo = categories.find(c => c.slug === categorySlug);
+  const categoryName = categoryInfo?.name || categorySlug;
   const categoryIcon = categoryInfo?.icon || '📄';
   
   return (
@@ -26,7 +32,7 @@ export default async function CategoryPage({ params }: { params: { category: str
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold mb-2 flex items-center justify-center">
           <span className="mr-2 text-2xl">{categoryIcon}</span>
-          {decodedCategory}
+          {categoryName}
         </h1>
         <p className="text-gray-600">
           {posts.length}件の記事が見つかりました
@@ -60,15 +66,21 @@ export default async function CategoryPage({ params }: { params: { category: str
                       {post.date && formatDate(post.date)}
                     </div>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {post.categories && post.categories.map(category => (
-                        <Link 
-                          href={`/categories/${encodeURIComponent(category)}`} 
-                          key={category}
-                          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded transition-colors"
-                        >
-                          {category}
-                        </Link>
-                      ))}
+                      {post.categories && post.categories.map(categoryName => {
+                        // カテゴリ名からスラッグを取得
+                        const catInfo = categories.find(c => c.name === categoryName);
+                        const catSlug = catInfo?.slug || categoryName.toLowerCase().replace(/\s+/g, '-');
+                        
+                        return (
+                          <Link 
+                            href={`/categories/${catSlug}`} 
+                            key={categoryName}
+                            className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded transition-colors"
+                          >
+                            {categoryName}
+                          </Link>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
