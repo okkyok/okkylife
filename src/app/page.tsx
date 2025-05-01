@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Welcome | Jihoo Kim',
+  title: 'Welcome | 愛をもって、人生を楽しみ尽くす',
 };
 
 export default function HomePage() {

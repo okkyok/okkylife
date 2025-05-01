@@ -1,3 +1,5 @@
+import Image from 'next/image';
+
 export const metadata = {
   title: 'About',
   description: 'おっきーのプロフィールページです。パートナーシップコーチとして活動しています。',
@@ -8,8 +10,21 @@ export default function AboutPage() {
     <div className="mt-12 max-w-2xl mx-auto">
       <h1 className="text-center text-3xl font-bold mb-8">About</h1>
       
+      {/* プロフィール写真 */}
+      <div className="mb-8 flex justify-center">
+        <div className="relative w-64 h-64 rounded-full overflow-hidden border-4 border-gray-200 shadow-lg">
+          <Image 
+            src="/images/profile-image.jpg" 
+            alt="おっきーのプロフィール写真" 
+            fill
+            style={{ objectFit: 'cover' }}
+            priority
+          />
+        </div>
+      </div>
+      
       <div className="prose prose-lg mx-auto">
-        <h2 className="text-2xl font-bold mb-4">おっきー｜パートナーシップコーチ</h2>
+        <h2 className="text-2xl font-bold mb-4 text-center">おっきー｜パートナーシップコーチ</h2>
         
         <p className="mb-6">
           普段は旅しながら、コーチング、小さな会社の経営をしています。<br />
