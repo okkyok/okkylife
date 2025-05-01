@@ -268,6 +268,32 @@ export async function getRecentPosts(): Promise<Post[]> {
 }
 
 /**
+ * カテゴリでフィルタリングした投稿を取得する
+ * @param category フィルタリングするカテゴリ名
+ */
+export async function getPostsByCategory(category: string): Promise<Post[]> {
+  try {
+    const allPosts = await getAllPostsFromNotion();
+    
+    // 公開済みで指定されたカテゴリの投稿のみをフィルタリング
+    return allPosts
+      .filter(post => 
+        post.published && 
+        post.categories && 
+        post.categories.includes(category)
+      )
+      .sort((a, b) => {
+        const dateA = new Date(a.date || a.lastEditedAt).getTime();
+        const dateB = new Date(b.date || b.lastEditedAt).getTime();
+        return dateB - dateA;
+      });
+  } catch (error) {
+    console.error(`カテゴリ "${category}" の投稿取得エラー:`, error);
+    return [];
+  }
+}
+
+/**
  * カテゴリとタグの一覧を取得する
  * ビルド時間短縮のためにメモリキャッシュを利用
  */
