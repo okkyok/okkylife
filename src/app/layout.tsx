@@ -13,6 +13,21 @@ export const metadata = {
     default: 'Jihoo Kim',
     template: '%s | Jihoo Kim',
   },
+  metadataBase: new URL(process.env.SITE_URL || 'https://okkylife.com'),
+  description: 'Jihoo Kimの個人ブログです。プログラミングや日常について書いています。',
+  openGraph: {
+    title: 'Jihoo Kim',
+    description: 'Jihoo Kimの個人ブログ',
+    url: process.env.SITE_URL,
+    siteName: 'Jihoo Kim',
+    locale: 'ja_JP',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Jihoo Kim',
+    description: 'Jihoo Kimの個人ブログ',
+  },
 };
 
 export default function RootLayout({

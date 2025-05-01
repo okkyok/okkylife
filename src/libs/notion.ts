@@ -121,41 +121,68 @@ export function mapImageUrl(url: string, block: Block): string | null {
 }
 
 /**
- * リトライ機能付きの画像フェッチ関数
+ * 画像URLをfetchする関数（リトライ機能付き）
  * @param url 画像URL
  * @param maxRetries 最大リトライ回数
- * @returns レスポンス
+ * @returns Response
  */
-export async function fetchImageWithRetry(url: string, maxRetries = 3): Promise<Response> {
+export async function fetchImageWithRetry(url: string, maxRetries = 5): Promise<Response> {
   let retries = 0;
-  
-  while (true) {
+  let lastError: Error = new Error(`画像取得に失敗しました: ${url}`);
+
+  while (retries <= maxRetries) {
     try {
-      const response = await fetch(url, { 
-        headers: { 
-          'User-Agent': 'Mozilla/5.0',
-          'Cache-Control': 'no-cache'
-        },
-        // タイムアウトを設定（ブラウザAPIではサポートされていないため、AbortControllerを使用）
-        signal: AbortSignal.timeout(10000) // 10秒タイムアウト
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      // リトライ時は指数バックオフで待機時間を増やす
+      if (retries > 0) {
+        // 初回リトライは短く、その後徐々に長くする（最大15秒まで）
+        const waitTime = Math.min(Math.pow(1.5, retries) * 500, 15000);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        console.log(`リトライ (${retries}/${maxRetries}): ${url} - ${waitTime}ms待機`);
       }
-      
-      return response;
-    } catch (error: any) {
-      if (retries >= maxRetries) {
-        console.error(`画像フェッチ失敗（${url}）:`, error.message || error);
+
+      // タイムアウト付きのfetch
+      const controller = new AbortController();
+      // タイムアウト時間を長めに設定（15秒）
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      try {
+        const response = await fetch(url, { 
+          signal: controller.signal,
+          // キャッシュ設定を追加
+          cache: 'force-cache',
+          // 接続エラー対策として接続タイムアウトを設定
+          headers: {
+            'Connection': 'keep-alive'
+          }
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return response;
+      } catch (error: unknown) {
+        clearTimeout(timeoutId);
+        // EPIPEエラーなど特定のネットワークエラーの場合は少し長めに待機
+        const fetchError = error as { message?: string };
+        if (fetchError.message && (
+            fetchError.message.includes('EPIPE') || 
+            fetchError.message.includes('network') || 
+            fetchError.message.includes('fetch failed')
+        )) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
         throw error;
       }
-      
-      const delay = 1000 * Math.pow(2, retries) + Math.random() * 1000;
-      console.log(`画像フェッチ失敗。${Math.round(delay / 1000)}秒後に再試行... (${retries + 1}/${maxRetries})`);
-      
-      await new Promise(resolve => setTimeout(resolve, delay));
+    } catch (error: unknown) {
+      const err = error as Error;
+      lastError = err;
       retries++;
+      console.error(`画像取得エラー (${retries}/${maxRetries}): ${url} - ${err.message || 'Unknown error'}`);
     }
   }
+
+  console.error(`画像取得最終エラー: ${url} - フォールバック画像を使用します`);
+  throw lastError;
 }
