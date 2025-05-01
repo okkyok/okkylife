@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { getRecentPosts } from '@/services/posts';
+import { getRecentPosts, getCategoriesAndTags } from '@/services/posts';
 
 export const metadata = {
   title: 'Welcome | 愛をもって、人生を楽しみ尽くす',
@@ -8,8 +8,9 @@ export const metadata = {
 };
 
 export default async function HomePage() {
-  // 直近1ヶ月の記事を取得
+  // 直近1ヶ月の記事とカテゴリ・タグを取得
   const recentPosts = await getRecentPosts();
+  const { categories, tags } = await getCategoriesAndTags();
   
   return (
     <div className="mt-12">
@@ -42,8 +43,48 @@ export default async function HomePage() {
               地方公立大学→インターネット広告代理店。その後、2017年3月から個人事業主として活動開始。2019年9月に起業。
             </p>
             
-            <div className="mt-6 text-center">
+            <div className="mt-6 mb-10 text-center">
               <Link href="/about" className="text-blue-600 hover:text-blue-800">詳しく見る →</Link>
+            </div>
+            
+            {/* カテゴリ一覧 */}
+            <div className="mt-8 border-t border-gray-200 pt-6">
+              <div className="flex items-center mb-4">
+                <span className="text-gray-700 mr-2">■</span>
+                <h3 className="text-lg font-bold">カテゴリ</h3>
+              </div>
+              
+              <ul className="space-y-2">
+                {categories.map((category) => (
+                  <li key={category.name} className="flex items-center">
+                    <span className="mr-2">{category.icon}</span>
+                    <Link href={`/categories/${encodeURIComponent(category.name)}`} className="hover:text-blue-600 transition-colors flex-grow">
+                      {category.name}
+                    </Link>
+                    <span className="text-sm text-gray-500 ml-auto">{category.count}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            {/* タグ一覧 */}
+            <div className="mt-8 border-t border-gray-200 pt-6">
+              <div className="flex items-center mb-4">
+                <span className="text-gray-700 mr-2">■</span>
+                <h3 className="text-lg font-bold">タグ一覧</h3>
+              </div>
+              
+              <ul className="space-y-2">
+                {tags.map((tag) => (
+                  <li key={tag.name} className="flex items-center">
+                    <span className="mr-2">🏷️</span>
+                    <Link href={`/tags/${encodeURIComponent(tag.name)}`} className="hover:text-blue-600 transition-colors flex-grow">
+                      {tag.name}
+                    </Link>
+                    <span className="text-sm text-gray-500 ml-auto">{tag.count}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>

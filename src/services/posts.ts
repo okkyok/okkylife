@@ -328,3 +328,74 @@ export async function getRecentPosts() {
     return dateB - dateA;
   });
 }
+
+/**
+ * カテゴリとタグの一覧を取得する関数
+ */
+export async function getCategoriesAndTags() {
+  const allPosts = await getAllPostsFromNotion();
+  
+  // 公開済みの記事のみをフィルタリング
+  const publishedPosts = allPosts.filter(post => post.published);
+  
+  // すべてのカテゴリを取得し、重複を除去
+  const allCategories = publishedPosts.flatMap(post => post.categories);
+  const uniqueCategories = [...new Set(allCategories)];
+  
+  // カテゴリとその記事数をマッピング
+  const categoryCount = uniqueCategories.map(category => {
+    const count = publishedPosts.filter(post => 
+      post.categories.includes(category)
+    ).length;
+    
+    return { name: category, count };
+  });
+  
+  // カテゴリにアイコンを追加
+  const categoriesWithIcons = categoryCount.map(category => {
+    let icon = '📄'; // デフォルトは文書アイコン
+    
+    // カテゴリ名に基づいてアイコンを設定
+    switch(category.name.toLowerCase()) {
+      case 'パートナーシップ':
+        icon = '👫'; // カップル
+        break;
+      case '旅':
+        icon = '🌎'; // 地球
+        break;
+      case 'ポーカー':
+        icon = '🎴'; // トランプ
+        break;
+      case '人生':
+        icon = '💼'; // ビル
+        break;
+      case '生活':
+        icon = '🎯'; // 家
+        break;
+      case '仕組み化':
+        icon = '🤖'; // ロボット
+        break;
+      case 'ビジネス':
+        icon = '🛍'; // ショッピングバッグ
+        break;
+      case '健康':
+        icon = '❤️'; // ハート
+        break;
+    }
+    
+    return { ...category, icon };
+  });
+  
+  // 記事数の多い順にソート
+  const sortedCategories = categoriesWithIcons.sort((a, b) => b.count - a.count);
+  
+  // タグは現段階ではダミーデータを返す
+  const tags = [
+    { name: 'Tag Library', count: publishedPosts.length }
+  ];
+  
+  return {
+    categories: sortedCategories,
+    tags
+  };
+}
