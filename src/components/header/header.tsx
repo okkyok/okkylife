@@ -14,7 +14,10 @@ export default function Header() {
   return (
     <nav className="flex flex-col justify-between py-12 md:flex-row">
       <Link href="/" className="self-start md:self-auto">
-        <h1 className="text-3xl font-bold">愛をもって、人生を楽しみ尽くす</h1>
+        <h1 className="text-3xl font-bold leading-tight">
+          <span className="inline-block">愛をもって、</span>{' '}
+          <span className="inline-block">人生を楽しみ尽くす</span>
+        </h1>
       </Link>
       <div className="my-6 flex space-x-8 self-center md:my-0 md:self-auto">
         <ul className="flex space-x-8">
