@@ -92,12 +92,48 @@ export async function getAllPostsFromNotion() {
 
   // 空のカバー画像URLを持つ投稿をフィルタリングしてからぼかし画像を生成
   const postsWithCover = allPosts.filter(post => post.cover);
-  const blurImagesPromises = postsWithCover.map((post) => getBlurImage(post.cover));
-  const blurImages = await Promise.all(blurImagesPromises);
+  
+  // 画像処理の並列実行を制限する関数
+  async function processImagesInBatches(items: Post[], batchSize = 5) {
+    const results = [];
+    
+    // バッチ処理で画像を処理
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      console.log(`画像バッチ処理: ${i + 1}〜${Math.min(i + batchSize, items.length)}/${items.length}`);
+      
+      try {
+        // 各バッチ内の画像を並列処理
+        const batchResults = await Promise.all(
+          batch.map(post => getBlurImage(post.cover).catch(error => {
+            console.error(`画像処理エラー (${post.slug}):`, error);
+            // エラー時はデフォルト値を返す
+            return { base64: '' };
+          }))
+        );
+        
+        results.push(...batchResults);
+      } catch (error) {
+        console.error('バッチ処理エラー:', error);
+        // バッチ処理に失敗した場合、そのバッチには空の結果を入れる
+        results.push(...Array(batch.length).fill({ base64: '' }));
+      }
+      
+      // 各バッチ間で少し待機して、レート制限を回避
+      if (i + batchSize < items.length) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+    
+    return results;
+  }
+  
+  // バッチ処理で画像を処理
+  const blurImages = await processImagesInBatches(postsWithCover);
   
   // ぼかし画像をポストに追加（カバー画像がある投稿のみ）
   postsWithCover.forEach((post, i) => {
-    post.blurUrl = blurImages[i].base64;
+    post.blurUrl = blurImages[i]?.base64 || '';
   });
   
   // カバー画像がない投稿にはデフォルトのぼかし画像URLを設定

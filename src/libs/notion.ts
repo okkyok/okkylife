@@ -54,58 +54,108 @@ export async function getRecordMap(id: string) {
   return withRetry(() => notion.getPage(id));
 }
 
+/**
+ * 画像URLをマッピングする関数（エラーハンドリング強化版）
+ */
 export function mapImageUrl(url: string, block: Block): string | null {
-  if (!url) {
-    return null;
-  }
-
-  if (url.startsWith('data:')) {
-    return url;
-  }
-
-  // more recent versions of notion don't proxy unsplash images
-  if (url.startsWith('https://images.unsplash.com')) {
-    return url;
-  }
-
   try {
-    const u = new URL(url);
-
-    if (
-      u.pathname.startsWith('/secure.notion-static.com') &&
-      u.hostname.endsWith('.amazonaws.com')
-    ) {
-      if (
-        u.searchParams.has('X-Amz-Credential') &&
-        u.searchParams.has('X-Amz-Signature') &&
-        u.searchParams.has('X-Amz-Algorithm')
-      ) {
-        // if the URL is already signed, then use it as-is
-        return url;
-      }
+    if (!url) {
+      return '/images/fallback-image.jpg'; // フォールバック画像
     }
-  } catch {
-    // ignore invalid urls
+
+    if (url.startsWith('data:')) {
+      return url;
+    }
+
+    // more recent versions of notion don't proxy unsplash images
+    if (url.startsWith('https://images.unsplash.com')) {
+      return url;
+    }
+
+    try {
+      const u = new URL(url);
+
+      if (
+        u.pathname.startsWith('/secure.notion-static.com') &&
+        u.hostname.endsWith('.amazonaws.com')
+      ) {
+        if (
+          u.searchParams.has('X-Amz-Credential') &&
+          u.searchParams.has('X-Amz-Signature') &&
+          u.searchParams.has('X-Amz-Algorithm')
+        ) {
+          // if the URL is already signed, then use it as-is
+          return url;
+        }
+      }
+    } catch (error) {
+      console.warn('Invalid URL in mapImageUrl:', url);
+      // ignore invalid urls but provide a fallback
+      return '/images/fallback-image.jpg';
+    }
+
+    if (url.startsWith('/images')) {
+      url = `https://www.notion.so${url}`;
+    }
+
+    url = `https://www.notion.so${
+      url.startsWith('/image') ? url : `/image/${encodeURIComponent(url)}`
+    }`;
+
+    const notionImageUrlV2 = new URL(url);
+    let table = block.parent_table === 'space' ? 'block' : block.parent_table;
+    if (table === 'collection' || table === 'team') {
+      table = 'block';
+    }
+    notionImageUrlV2.searchParams.set('table', table);
+    notionImageUrlV2.searchParams.set('id', block.id);
+    notionImageUrlV2.searchParams.set('cache', 'v2');
+
+    url = notionImageUrlV2.toString();
+
+    return url || '/images/fallback-image.jpg';
+  } catch (error) {
+    console.error('Error mapping image URL:', error);
+    return '/images/fallback-image.jpg'; // エラー時のフォールバック
   }
+}
 
-  if (url.startsWith('/images')) {
-    url = `https://www.notion.so${url}`;
+/**
+ * リトライ機能付きの画像フェッチ関数
+ * @param url 画像URL
+ * @param maxRetries 最大リトライ回数
+ * @returns レスポンス
+ */
+export async function fetchImageWithRetry(url: string, maxRetries = 3): Promise<Response> {
+  let retries = 0;
+  
+  while (true) {
+    try {
+      const response = await fetch(url, { 
+        headers: { 
+          'User-Agent': 'Mozilla/5.0',
+          'Cache-Control': 'no-cache'
+        },
+        // タイムアウトを設定（ブラウザAPIではサポートされていないため、AbortControllerを使用）
+        signal: AbortSignal.timeout(10000) // 10秒タイムアウト
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      }
+      
+      return response;
+    } catch (error: any) {
+      if (retries >= maxRetries) {
+        console.error(`画像フェッチ失敗（${url}）:`, error.message || error);
+        throw error;
+      }
+      
+      const delay = 1000 * Math.pow(2, retries) + Math.random() * 1000;
+      console.log(`画像フェッチ失敗。${Math.round(delay / 1000)}秒後に再試行... (${retries + 1}/${maxRetries})`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      retries++;
+    }
   }
-
-  url = `https://www.notion.so${
-    url.startsWith('/image') ? url : `/image/${encodeURIComponent(url)}`
-  }`;
-
-  const notionImageUrlV2 = new URL(url);
-  let table = block.parent_table === 'space' ? 'block' : block.parent_table;
-  if (table === 'collection' || table === 'team') {
-    table = 'block';
-  }
-  notionImageUrlV2.searchParams.set('table', table);
-  notionImageUrlV2.searchParams.set('id', block.id);
-  notionImageUrlV2.searchParams.set('cache', 'v2');
-
-  url = notionImageUrlV2.toString();
-
-  return url;
 }
