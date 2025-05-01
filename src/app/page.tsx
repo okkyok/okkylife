@@ -39,7 +39,7 @@ export default async function HomePage() {
             
             <h3 className="text-lg font-bold mt-6 mb-2">【経歴】</h3>
             <p className="mb-4">
-              "愛をもって、人生を楽しみ尽くす" 道中の記録、日々の気付きなどを徒然なるままに。<br />
+              &ldquo;愛をもって、人生を楽しみ尽くす&rdquo; 道中の記録、日々の気付きなどを徒然なるままに。<br />
               地方公立大学→インターネット広告代理店。その後、2017年3月から個人事業主として活動開始。2019年9月に起業。
             </p>
             
