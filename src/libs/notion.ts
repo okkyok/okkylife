@@ -1,15 +1,57 @@
 import { NotionAPI } from 'notion-client';
 import { Block } from 'notion-types';
 
+// Initialize the Notion API client
 const notion = new NotionAPI({
   authToken: process.env.NOTION_AUTH_TOKEN,
 });
 
-export function getRecordMap(id: string) {
+/**
+ * Retry function with exponential backoff
+ * @param fn Function to retry
+ * @param maxRetries Maximum number of retries
+ * @param initialDelay Initial delay in ms
+ * @returns Promise with the result of the function
+ */
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 1000): Promise<T> {
+  let retries = 0;
+  
+  while (true) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      // Check if it's a rate limit error (429) or another error that might benefit from retrying
+      const isRateLimitError = 
+        error.statusCode === 429 || 
+        error.code === 'ERR_NON_2XX_3XX_RESPONSE' || 
+        (error.message && error.message.includes('429'));
+      
+      // If we've reached max retries or it's not a rate limit error, throw
+      if (retries >= maxRetries || !isRateLimitError) {
+        throw error;
+      }
+      
+      // Calculate delay with exponential backoff and some jitter
+      const delay = initialDelay * Math.pow(2, retries) + Math.random() * 1000;
+      console.log(`Rate limit hit. Retrying in ${Math.round(delay / 1000)}s... (${retries + 1}/${maxRetries})`);
+      
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, delay));
+      retries++;
+    }
+  }
+}
+
+/**
+ * Get Notion page record map with retry mechanism for rate limiting
+ */
+export async function getRecordMap(id: string) {
   if (!id) {
     throw new Error(`Notion pageId is undefined or empty in getRecordMap. Received: '${id}'`);
   }
-  return notion.getPage(id);
+  
+  // Use the retry mechanism when fetching from Notion
+  return withRetry(() => notion.getPage(id));
 }
 
 export function mapImageUrl(url: string, block: Block): string | null {
