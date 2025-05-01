@@ -50,31 +50,81 @@ export async function getRecordMap(id: string) {
     throw new Error(`Notion pageId is undefined or empty in getRecordMap. Received: '${id}'`);
   }
   
-  // Use the retry mechanism when fetching from Notion
-  return withRetry(() => notion.getPage(id));
+  try {
+    // Use the retry mechanism when fetching from Notion
+    const recordMap = await withRetry(() => notion.getPage(id));
+    
+    // Validate the record map to ensure it has the necessary data
+    if (!recordMap) {
+      console.error(`Failed to get record map for page ${id}: Record map is null or undefined`);
+      throw new Error(`Failed to get record map for page ${id}`);
+    }
+    
+    // Check for missing blocks and log warnings
+    if (recordMap.block) {
+      const missingBlocks = [];
+      const blockKeys = Object.keys(recordMap.block);
+      
+      // Count missing blocks (blocks with undefined values)
+      for (const blockId in recordMap.block) {
+        if (!recordMap.block[blockId]?.value) {
+          missingBlocks.push(blockId);
+        }
+      }
+      
+      // Log warning if there are missing blocks
+      if (missingBlocks.length > 0) {
+        console.warn(`Found ${missingBlocks.length} missing blocks out of ${blockKeys.length} total blocks`);
+        // Only log the first few missing blocks to avoid excessive logging
+        if (missingBlocks.length > 5) {
+          console.warn(`First 5 missing block IDs: ${missingBlocks.slice(0, 5).join(', ')}...`);
+        } else {
+          console.warn(`Missing block IDs: ${missingBlocks.join(', ')}`);
+        }
+      }
+    }
+    
+    return recordMap;
+  } catch (error) {
+    console.error(`Error fetching Notion page ${id}:`, error);
+    // Rethrow to allow the caller to handle the error
+    throw error;
+  }
 }
 
 /**
  * 画像URLをマッピングする関数（エラーハンドリング強化版）
  */
 export function mapImageUrl(url: string, block: Block): string | null {
+  // デフォルトのフォールバック画像
+  const fallbackImage = '/images/fallback-image.jpg';
+  
   try {
-    if (!url) {
-      return '/images/fallback-image.jpg'; // フォールバック画像
+    // URLが空または無効な場合はフォールバック
+    if (!url || typeof url !== 'string') {
+      console.warn(`Invalid image URL: ${url}, using fallback`);
+      return fallbackImage;
     }
 
+    // Data URLはそのまま返す
     if (url.startsWith('data:')) {
       return url;
     }
 
-    // more recent versions of notion don't proxy unsplash images
+    // Unsplash画像は直接返す
     if (url.startsWith('https://images.unsplash.com')) {
+      return url;
+    }
+    
+    // S3画像は直接返す
+    if (url.includes('s3-us-west-2.amazonaws.com')) {
       return url;
     }
 
     try {
       const u = new URL(url);
 
+      // 署名済みAmazon S3 URLの処理
       if (
         u.pathname.startsWith('/secure.notion-static.com') &&
         u.hostname.endsWith('.amazonaws.com')
@@ -84,39 +134,62 @@ export function mapImageUrl(url: string, block: Block): string | null {
           u.searchParams.has('X-Amz-Signature') &&
           u.searchParams.has('X-Amz-Algorithm')
         ) {
-          // if the URL is already signed, then use it as-is
+          // 署名済みURLはそのまま使用
           return url;
         }
       }
+      
+      // Notion CDN URLの処理
+      if (u.hostname === 'www.notion.so' || u.hostname === 'notion.so') {
+        // すでにNotion URLの場合は処理を続行
+      } else if (u.protocol === 'https:' || u.protocol === 'http:') {
+        // 外部URLの場合はNotion経由でプロキシ
+        url = `https://www.notion.so/image/${encodeURIComponent(url)}`;
+      } else {
+        // 無効なプロトコルの場合はフォールバック
+        console.warn(`Invalid URL protocol: ${u.protocol}, using fallback`);
+        return fallbackImage;
+      }
     } catch (error) {
-      console.warn('Invalid URL in mapImageUrl:', url);
-      // ignore invalid urls but provide a fallback
-      return '/images/fallback-image.jpg';
+      console.warn(`Invalid URL in mapImageUrl: ${url}, using fallback`, error);
+      return fallbackImage;
     }
 
+    // Notion内部画像パスの処理
     if (url.startsWith('/images')) {
       url = `https://www.notion.so${url}`;
+    } else if (!url.startsWith('https://www.notion.so')) {
+      url = `https://www.notion.so${url.startsWith('/image') ? url : `/image/${encodeURIComponent(url)}`}`;
     }
 
-    url = `https://www.notion.so${
-      url.startsWith('/image') ? url : `/image/${encodeURIComponent(url)}`
-    }`;
-
-    const notionImageUrlV2 = new URL(url);
-    let table = block.parent_table === 'space' ? 'block' : block.parent_table;
-    if (table === 'collection' || table === 'team') {
-      table = 'block';
+    try {
+      // Notion画像URLのパラメータ設定
+      const notionImageUrlV2 = new URL(url);
+      let table = block?.parent_table === 'space' ? 'block' : (block?.parent_table || 'block');
+      if (table === 'collection' || table === 'team') {
+        table = 'block';
+      }
+      
+      // ブロックIDが無効な場合のチェック
+      if (!block?.id) {
+        console.warn('Missing block ID for image URL, using fallback');
+        return fallbackImage;
+      }
+      
+      notionImageUrlV2.searchParams.set('table', table);
+      notionImageUrlV2.searchParams.set('id', block.id);
+      notionImageUrlV2.searchParams.set('cache', 'v2');
+      
+      // 最終的なURL生成
+      const finalUrl = notionImageUrlV2.toString();
+      return finalUrl || fallbackImage;
+    } catch (error) {
+      console.error(`Error creating Notion image URL for ${url}:`, error);
+      return fallbackImage;
     }
-    notionImageUrlV2.searchParams.set('table', table);
-    notionImageUrlV2.searchParams.set('id', block.id);
-    notionImageUrlV2.searchParams.set('cache', 'v2');
-
-    url = notionImageUrlV2.toString();
-
-    return url || '/images/fallback-image.jpg';
   } catch (error) {
     console.error('Error mapping image URL:', error);
-    return '/images/fallback-image.jpg'; // エラー時のフォールバック
+    return fallbackImage;
   }
 }
 

@@ -45,5 +45,24 @@
     "tailwindcss": "3.3",
     "tsx": "^3.12.7",
     "typescript": "5.0.2"
+  },
+  "overrides": {
+    "react-notion-x": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    },
+    "notion-client": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    },
+    "react-lazy-images": {
+      "react": "$react"
+    },
+    "react-image": {
+      "react": "$react"
+    },
+    "react-intersection-observer": {
+      "react": "$react"
+    }
   }
 }

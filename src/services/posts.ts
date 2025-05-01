@@ -59,147 +59,181 @@ function getPropertyUrl(property: NotionPropertyValue | undefined): string {
 export async function getAllPostsFromNotion() {
   const allPosts: Post[] = [];
   const notionDbId = process.env.NOTION_DATABASE_ID;
+  
   if (!notionDbId) {
     throw new Error('NOTION_DATABASE_ID is not set. Please check your .env file.');
   }
-  const recordMap = await getRecordMap(notionDbId) as RecordMap;
-  const { block, collection } = recordMap;
   
-  // コレクションが存在しない場合のエラーハンドリング
-  if (!collection || Object.keys(collection).length === 0) {
-    throw new Error('Notion database collection not found');
-  }
-  
-  const collectionValue = Object.values(collection)[0]?.value;
-  if (!collectionValue || !collectionValue.schema) {
-    throw new Error('Notion database schema not found');
-  }
-  
-  const schema = collectionValue.schema;
-  const propertyMap: Record<string, string> = {};
-
-  Object.keys(schema).forEach((key) => {
-    const name = schema[key]?.name;
-    if (name) {
-      propertyMap[name] = key;
-    }
-  });
-
-  // 必須プロパティが存在するか確認
-  const requiredProps = ['Slug', 'Page', 'Category'];
-  const missingProps = requiredProps.filter(prop => !propertyMap[prop]);
-  if (missingProps.length > 0) {
-    console.warn(`Missing required properties in Notion schema: ${missingProps.join(', ')}`);
-  }
-
-  Object.keys(block).forEach((pageId) => {
-    const blockValue = block[pageId]?.value as BlockValue;
-    if (!blockValue) return;
+  try {
+    console.log(`Fetching Notion database: ${notionDbId}`);
+    const recordMap = await getRecordMap(notionDbId) as RecordMap;
+    const { block, collection } = recordMap;
     
-    // 必須条件の確認
-    if (
-      blockValue.type === 'page' &&
-      blockValue.properties && 
-      propertyMap['Slug'] && 
-      blockValue.properties[propertyMap['Slug']]
-    ) {
-      const { properties, last_edited_time } = blockValue;
-      if (!properties) return;
-
-      // コンテンツの安全な取得
-      const contents = blockValue.content || [];
-      const dates = contents.map((content) => {
-        return block[content]?.value?.last_edited_time;
-      }).filter(Boolean) as number[];
-      
-      if (last_edited_time) {
-        dates.push(last_edited_time);
-      }
-      
-      dates.sort((a, b) => b - a);
-      const lastEditedAt = dates[0] || Date.now();
-
-      // 基本プロパティの安全な取得
-      const id = pageId;
-      let slug = '';
-      let title = '';
-      let categories: string[] = [];
-      
-      try {
-        // ヘルパー関数を使用して安全にプロパティを取得
-        slug = propertyMap['Slug'] ? getPropertyText(properties[propertyMap['Slug']]) : '';
-        title = propertyMap['Page'] ? getPropertyText(properties[propertyMap['Page']]) : '';
-        
-        const categoryStr = propertyMap['Category'] ? getPropertyText(properties[propertyMap['Category']]) : '';
-        if (categoryStr) {
-          categories = categoryStr.split(',').map(c => c.trim()).filter(Boolean);
-        }
-      } catch (error) {
-        console.warn(`Error parsing basic properties for page: ${id}`, error);
-        return; // 基本プロパティが取得できない場合はスキップ
-      }
-      
-      // Coverプロパティの安全な取得
-      let cover = '';
-      try {
-        if (propertyMap['Cover']) {
-          cover = getPropertyUrl(properties[propertyMap['Cover']]);
-        }
-      } catch (error) {
-        console.warn(`Cover image not found for page: ${id}`);
-      }
-      
-      // Dateプロパティの安全な取得
-      let date = '';
-      try {
-        if (propertyMap['Date']) {
-          date = getPropertyDate(properties[propertyMap['Date']]);
-        }
-      } catch (error) {
-        console.warn(`Date not found for page: ${id}`);
-      }
-      
-      // Publishedプロパティの安全な取得
-      let published = false;
-      try {
-        if (propertyMap['Published']) {
-          published = getPropertyText(properties[propertyMap['Published']]) === 'Yes';
-        }
-      } catch (error) {
-        console.warn(`Published status not found for page: ${id}`);
-      }
-
-      // 必須フィールドの検証
-      if (!slug || !title) {
-        console.warn(`Skipping page ${id} due to missing required fields`);
-        return;
-      }
-      
-      allPosts.push({
-        id,
-        title,
-        slug,
-        categories,
-        // Fix 403 error for images.
-        // https://github.com/NotionX/react-notion-x/issues/211
-        cover: cover ? mapImageUrl(cover, blockValue) || '' : '',
-        date,
-        published,
-        lastEditedAt,
-      });
+    // コレクションが存在しない場合のエラーハンドリング
+    if (!collection || Object.keys(collection).length === 0) {
+      console.error('Notion database collection not found. Check your database ID and permissions.');
+      return [];
     }
-  });
+    
+    const collectionValue = Object.values(collection)[0]?.value;
+    if (!collectionValue || !collectionValue.schema) {
+      console.error('Notion database schema not found. Check your database structure.');
+      return [];
+    }
+    
+    const schema = collectionValue.schema;
+    const propertyMap: Record<string, string> = {};
 
-  // ビルド時間を短縮するため、ビルド時の画像処理を行わない
-  // 必要な画像はクライアントサイドで遅延ロードする
-  
-  // カバー画像がない投稿にはデフォルトのぼかし画像URLを設定
-  allPosts.forEach(post => {
-    // ビルド時にはぼかし画像を生成せず、空文字列を設定
-    post.blurUrl = '';
-  });
+    Object.keys(schema).forEach((key) => {
+      const name = schema[key]?.name;
+      if (name) {
+        propertyMap[name] = key;
+      }
+    });
 
-  return allPosts;
+    // 必須プロパティが存在するか確認
+    const requiredProps = ['Slug', 'Page', 'Category'];
+    const missingProps = requiredProps.filter(prop => !propertyMap[prop]);
+    if (missingProps.length > 0) {
+      console.warn(`Missing required properties in Notion schema: ${missingProps.join(', ')}`);
+    }
+
+    // ブロック数をログ出力（デバッグ用）
+    const blockCount = Object.keys(block).length;
+    console.log(`Processing ${blockCount} blocks from Notion database`);
+    
+    Object.keys(block).forEach((pageId) => {
+      try {
+        const blockValue = block[pageId]?.value as BlockValue;
+        if (!blockValue) {
+          console.warn(`Missing block value for pageId: ${pageId}`);
+          return;
+        }
+      
+        // 必須条件の確認
+        if (
+          blockValue.type === 'page' &&
+          blockValue.properties && 
+          propertyMap['Slug'] && 
+          blockValue.properties[propertyMap['Slug']]
+        ) {
+          const { properties, last_edited_time } = blockValue;
+          if (!properties) return;
+
+          // コンテンツの安全な取得
+          const contents = blockValue.content || [];
+          const dates = contents.map((content) => {
+            if (!block[content] || !block[content]?.value) {
+              // Missing blockがある場合はログ出力するが処理は続行
+              console.warn(`Missing block reference: ${content} in page ${pageId}`);
+              return null;
+            }
+            return block[content]?.value?.last_edited_time;
+          }).filter(Boolean) as number[];
+          
+          if (last_edited_time) {
+            dates.push(last_edited_time);
+          }
+          
+          dates.sort((a, b) => b - a);
+          const lastEditedAt = dates[0] || Date.now();
+
+          // 基本プロパティの安全な取得
+          const id = pageId;
+          let slug = '';
+          let title = '';
+          let categories: string[] = [];
+          
+          try {
+            // 必須プロパティの取得
+            slug = getPropertyText(properties[propertyMap['Slug']]);
+            if (!slug) {
+              console.warn(`Missing or empty Slug property for page ${pageId}`);
+              return; // スラッグがない記事はスキップ
+            }
+            
+            title = getPropertyText(properties[propertyMap['Page']]);
+            if (!title) {
+              console.warn(`Missing or empty Page (title) property for page ${pageId} (slug: ${slug})`);
+              // タイトルがなくてもスラッグがあれば続行
+            }
+            
+            // カテゴリの取得（複数可能）
+            const categoryProp = properties[propertyMap['Category']];
+            if (categoryProp && Array.isArray(categoryProp)) {
+              categories = categoryProp.map(item => {
+                return item[0] || '';
+              }).filter(Boolean);
+            }
+          } catch (error) {
+            console.error(`Error processing page ${pageId}:`, error);
+            return;
+          }
+          
+          // Coverプロパティの安全な取得
+          let cover = '';
+          try {
+            if (propertyMap['Cover']) {
+              cover = getPropertyUrl(properties[propertyMap['Cover']]);
+            }
+          } catch (error) {
+            console.warn(`Error getting cover for page ${id}:`, error);
+          }
+          
+          // Dateプロパティの安全な取得
+          let date = '';
+          try {
+            if (propertyMap['Date']) {
+              date = getPropertyDate(properties[propertyMap['Date']]);
+            }
+          } catch (error) {
+            console.warn(`Error getting date for page ${id}:`, error);
+          }
+          
+          // Publishedプロパティの安全な取得
+          let published = true; // デフォルトは公開
+          try {
+            if (propertyMap['Published']) {
+              const publishedText = getPropertyText(properties[propertyMap['Published']]);
+              published = publishedText.toLowerCase() !== 'false';
+            }
+          } catch (error) {
+            console.warn(`Error getting published status for page ${id}:`, error);
+          }
+          
+          // 投稿オブジェクトの作成
+          allPosts.push({
+            id,
+            slug,
+            title,
+            categories,
+            cover: cover ? mapImageUrl(cover, blockValue) || '' : '',
+            date,
+            published,
+            lastEditedAt,
+          });
+        }
+      } catch (error) {
+        console.error(`Error processing block ${pageId}:`, error);
+        // エラーが発生しても処理を続行
+      }
+    });
+
+    // ビルド時間を短縮するため、ビルド時の画像処理を行わない
+    // 必要な画像はクライアントサイドで遅延ロードする
+    
+    // カバー画像がない投稿にはデフォルトのぼかし画像URLを設定
+    allPosts.forEach(post => {
+      // ビルド時にはぼかし画像を生成せず、空文字列を設定
+      post.blurUrl = '';
+    });
+
+    console.log(`Successfully processed ${allPosts.length} posts from Notion`);
+    return allPosts;
+  } catch (error) {
+    console.error('Failed to fetch posts from Notion:', error);
+    return [];
+  }
 }
 
 // カテゴリとタグの型定義
@@ -231,30 +265,21 @@ export async function getRecentPosts(): Promise<Post[]> {
     if (global.__RECENT_POSTS_CACHE) {
       return global.__RECENT_POSTS_CACHE;
     }
-
-    // 直近1ヶ月の投稿を取得
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
     const allPosts = await getAllPostsFromNotion();
     
-    // 公開済みの最新5件のみ取得
-    const recentPosts = allPosts
-      .filter((post: Post) => {
-        if (!post.date || !post.published) return false;
-        
-        try {
-          const postDate = new Date(post.date);
-          return postDate >= oneMonthAgo;
-        } catch {
-          return false;
-        }
-      })
-      .sort((a: Post, b: Post) => {
-        const dateA = new Date(a.date || a.lastEditedAt).getTime();
-        const dateB = new Date(b.date || b.lastEditedAt).getTime();
-        return dateB - dateA;
-      })
+    // 公開済みの投稿のみをフィルタリング
+    const publishedPosts = allPosts.filter(post => post.published);
+    
+    // 日付でソート（最新順）
+    const sortedPosts = publishedPosts.sort((a, b) => {
+      const dateA = new Date(a.date || a.lastEditedAt).getTime();
+      const dateB = new Date(b.date || b.lastEditedAt).getTime();
+      return dateB - dateA;
+    });
+    
+    // 直近の投稿を返す（最大5件）
+    const recentPosts = sortedPosts
       .slice(0, 5);
     
     // メモリキャッシュに保存
