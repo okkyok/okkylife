@@ -291,3 +291,40 @@ export async function getAllPostsFromNotion() {
 
   return allPosts;
 }
+
+/**
+ * 直近1ヶ月の記事を取得する関数
+ */
+export async function getRecentPosts() {
+  const allPosts = await getAllPostsFromNotion();
+  
+  // 公開済みの記事のみをフィルタリング
+  const publishedPosts = allPosts.filter(post => post.published);
+  
+  // 現在の日付から1ヶ月前の日付を計算
+  const now = new Date();
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(now.getMonth() - 1);
+  
+  // 日付が存在する記事のみを対象に、直近1ヶ月の記事をフィルタリング
+  const recentPosts = publishedPosts.filter(post => {
+    if (!post.date) return false;
+    
+    try {
+      const postDate = new Date(post.date);
+      return postDate >= oneMonthAgo;
+    } catch (error) {
+      console.warn(`Invalid date format for post: ${post.slug}`, error);
+      // 日付形式が不正な場合は、最終編集日時を使用
+      const lastEditedDate = new Date(post.lastEditedAt);
+      return lastEditedDate >= oneMonthAgo;
+    }
+  });
+  
+  // 日付の新しい順にソート
+  return recentPosts.sort((a, b) => {
+    const dateA = a.date ? new Date(a.date).getTime() : a.lastEditedAt;
+    const dateB = b.date ? new Date(b.date).getTime() : b.lastEditedAt;
+    return dateB - dateA;
+  });
+}
