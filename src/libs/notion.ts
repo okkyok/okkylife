@@ -7,7 +7,6 @@ import {
 
 // 必要なモジュールを直接インポート
 import { NotionAPI } from 'notion-client';
-import { Block } from 'notion-types';
 
 // Initialize the Notion API client
 const notion = new NotionAPI({
