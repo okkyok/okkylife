@@ -12,6 +12,7 @@
     "inspect": "npm run lint && npm run ts"
   },
   "dependencies": {
+    "@notionhq/client": "^2.3.0",
     "@plaiceholder/next": "^3.0.0",
     "axios": "^1.4.0",
     "encoding": "^0.1.13",

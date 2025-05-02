@@ -2,12 +2,19 @@ import { getRecordMap, mapImageUrl } from '@/libs/notion';
 import { Post } from '@/types/post';
 import { getBlurImage } from '@/utils/get-blur-image';
 import { Block, RecordMap } from 'notion-types';
+import { Client } from '@notionhq/client';
+
+// Notion APIクライアントの初期化
+const notion = new Client({ 
+  auth: process.env.NOTION_API_KEY,
+});
 
 // Notionプロパティの型定義
 interface DateProperty {
   start_date?: string;
 }
 
+// Notionのプロパティ値の型定義（配列形式）
 type NotionPropertyValue = Array<any[]>;
 type NotionProperties = Record<string, NotionPropertyValue>;
 type BlockValue = Block & {
@@ -44,14 +51,68 @@ function getPropertyDate(property: NotionPropertyValue | undefined): string {
   }
 }
 
+/**
+ * NotionのプロパティからURLを取得する関数（完全に書き直し）
+ */
 function getPropertyUrl(property: NotionPropertyValue | undefined): string {
   try {
-    if (!property || !property[0] || !property[0][1] || !property[0][1][0]) return '';
+    // プロパティが存在しない場合
+    if (!property) {
+      console.log('Property is undefined or null');
+      return '';
+    }
     
-    const value = property[0][1][0][1];
-    return typeof value === 'string' ? value : '';
+    // デバッグ用にプロパティの全体をログ出力
+    console.log('Full property:', JSON.stringify(property, null, 2));
+    
+    // ファイルタイプの場合
+    if (property[0] && property[0][0] === 'file') {
+      const fileData = property[0][1];
+      console.log('File data:', fileData);
+      
+      // ファイルデータが配列の場合
+      if (Array.isArray(fileData) && fileData.length > 0) {
+        // ファイル情報を取得
+        const fileInfo = fileData[0][1];
+        console.log('File info:', fileInfo);
+        
+        // URLがオブジェクトに含まれている場合
+        if (typeof fileInfo === 'object' && fileInfo !== null && 'url' in fileInfo) {
+          console.log('Found URL in file object:', fileInfo.url);
+          return fileInfo.url as string;
+        }
+        // URLが文字列の場合
+        else if (typeof fileInfo === 'string') {
+          console.log('Found URL as string:', fileInfo);
+          return fileInfo;
+        }
+      }
+    }
+    // URLタイプの場合
+    else if (property[0] && property[0][0] === 'url' && property[0][1]) {
+      const url = property[0][1];
+      console.log('URL property:', url);
+      return typeof url === 'string' ? url : '';
+    }
+    // リンク形式の場合
+    else if (property[0] && property[0][1] && Array.isArray(property[0][1])) {
+      const linkData = property[0][1];
+      
+      // リンクデータを探索
+      for (const item of linkData) {
+        if (Array.isArray(item) && item.length > 1) {
+          if (item[0] === 'a' && item[1]) {
+            console.log('Found link URL:', item[1]);
+            return typeof item[1] === 'string' ? item[1] : '';
+          }
+        }
+      }
+    }
+    
+    console.log('No URL found in property');
+    return '';
   } catch (error) {
-    console.warn('Error getting property URL:', error);
+    console.error('Error getting property URL:', error);
     return '';
   }
 }
@@ -234,14 +295,61 @@ export async function getAllPostsFromNotion() {
             return;
           }
           
-          // Coverプロパティの安全な取得
+          // Coverプロパティの安全な取得 - 完全に書き直し
           let cover = '';
           try {
+            // ページのカバー画像を取得する方法を1：プロパティから取得
             if (propertyMap['Cover']) {
-              cover = getPropertyUrl(properties[propertyMap['Cover']]);
+              console.log(`Trying to get cover from property for page ${id} (${slug})`);
+              const coverProp = properties[propertyMap['Cover']];
+              
+              if (coverProp) {
+                cover = getPropertyUrl(coverProp);
+                console.log(`Cover from property for ${id} (${slug}):`, cover);
+              }
+            }
+            
+            // ページのカバー画像を取得する方法を2：blockの内部プロパティから取得
+            if (!cover && blockValue.format && blockValue.format.page_cover) {
+              cover = blockValue.format.page_cover;
+              console.log(`Cover from block format for ${id} (${slug}):`, cover);
+              
+              // Notionの相対パスを絶対URLに変換
+              if (cover.startsWith('/')) {
+                cover = `https://www.notion.so${cover}`;
+                console.log(`Converted relative path to absolute URL: ${cover}`);
+              }
+            }
+            
+            // ページのカバー画像を取得する方法を3：blockの内部属性から取得
+            if (!cover && blockValue.properties && blockValue.properties.cover) {
+              const blockCover = blockValue.properties.cover;
+              console.log(`Block cover property for ${id} (${slug}):`, blockCover);
+              
+              if (Array.isArray(blockCover) && blockCover.length > 0) {
+                // 配列の場合は最初の要素を使用
+                const coverValue = blockCover[0];
+                if (Array.isArray(coverValue) && coverValue.length > 0) {
+                  cover = coverValue[0];
+                  console.log(`Extracted cover from block property: ${cover}`);
+                }
+              }
+            }
+            
+            // デバッグ用にブロックの全体構造を確認
+            console.log(`Block structure for ${id} (${slug}):`, JSON.stringify({
+              format: blockValue.format,
+              properties_keys: blockValue.properties ? Object.keys(blockValue.properties) : [],
+            }, null, 2));
+            
+            // URLが空の場合はプレースホルダー画像を使用
+            if (!cover) {
+              cover = '/placeholder-image.jpg';
+              console.log(`Using placeholder image for ${id} (${slug})`);
             }
           } catch (error) {
-            console.warn(`Error getting cover for page ${id}:`, error);
+            console.warn(`Error getting cover for page ${id} (${slug}):`, error);
+            cover = '/placeholder-image.jpg'; // エラー時はプレースホルダーを使用
           }
           
           // Dateプロパティの安全な取得
@@ -265,13 +373,30 @@ export async function getAllPostsFromNotion() {
             console.warn(`Error getting published status for page ${id}:`, error);
           }
           
+          // カバー画像のURLを処理
+          let processedCover = '';
+          if (cover) {
+            // 元のカバー画像URLをログ出力
+            console.log(`Original cover URL for ${id} (${slug}):`, cover);
+            
+            // mapImageUrlを使用してURLを変換
+            processedCover = mapImageUrl(cover, blockValue) || '';
+            console.log(`Processed cover URL for ${id} (${slug}):`, processedCover);
+            
+            // URLが空の場合はプレースホルダー画像を使用
+            if (!processedCover) {
+              processedCover = '/placeholder-image.jpg';
+              console.log(`Using placeholder image for ${id} (${slug})`);
+            }
+          }
+          
           // 投稿オブジェクトの作成
           allPosts.push({
             id,
             slug,
             title,
             categories,
-            cover: cover ? mapImageUrl(cover, blockValue) || '' : '',
+            cover: processedCover,
             date,
             published,
             lastEditedAt,

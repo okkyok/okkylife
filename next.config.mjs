@@ -15,7 +15,7 @@ const nextConfig = {
     // optimizeCssとturbotraceはビルド時間が長くなる可能性があるので無効化
   },
 
-  // 画像最適化
+  // 画像最適化 - 完全に修正した版
   images: {
     remotePatterns: [
       {
@@ -26,7 +26,30 @@ const nextConfig = {
         protocol: 'https',
         hostname: 's3-us-west-2.amazonaws.com',
       },
+      {
+        protocol: 'https',
+        hostname: 's3.us-west-2.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'secure.notion-static.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'prod-files-secure.s3.us-west-2.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'notion-static.com',
+        pathname: '/**',
+      },
     ],
+    // 全ての画像を最適化なしで表示（ローカル環境での問題を解決）
+    unoptimized: true,
     // Notionの添付ファイルURLをサポート
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
@@ -37,9 +60,8 @@ const nextConfig = {
     formats: ['image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200], // デバイスサイズを減らす
     imageSizes: [16, 32, 48, 64, 96], // 画像サイズを減らす
-    // Notionの添付ファイルURLを許可
-    domains: [''],
-    unoptimized: true,
+    // ローカル環境でのデバッグ用に全てのドメインを許可
+    domains: ['*'],
   },
 
   // ビルド時間の制限
