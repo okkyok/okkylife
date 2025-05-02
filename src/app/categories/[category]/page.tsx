@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { getPostsByCategory, getCategoriesAndTags } from '@/services/posts';
 import { formatDate } from '@/utils/date';
+import PostCoverImage from '@/components/post-cover-image';
 
 export async function generateMetadata({ params }: { params: { category: string } }) {
   const categorySlug = params.category; // スラッグを取得
@@ -43,21 +44,14 @@ export default async function CategoryPage({ params }: { params: { category: str
         <div className="space-y-8">
           {posts.map(post => (
             <div key={post.id} className="border-b border-gray-200 pb-6">
-              <Link href={`/posts/${post.slug}`} className="block group">
+              <Link href={`/blog/${post.slug}`} className="block group">
                 <div className="flex flex-col md:flex-row gap-4">
-                  {post.cover && (
-                    <div className="md:w-1/3 relative h-48 overflow-hidden rounded-lg">
-                      <Image
-                        src={post.cover}
-                        alt={post.title}
-                        fill
-                        style={{ objectFit: 'cover' }}
-                        loading="lazy"
-                        placeholder="blur"
-                        blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAEtAJJXIDTiQAAAABJRU5ErkJggg=="
-                      />
-                    </div>
-                  )}
+                  <div className="md:w-1/3">
+                    <PostCoverImage
+                      src={post.cover}
+                      alt={post.title}
+                    />
+                  </div>
                   <div className="md:w-2/3">
                     <h2 className="text-xl font-bold mb-2 group-hover:text-blue-600 transition-colors">
                       {post.title}

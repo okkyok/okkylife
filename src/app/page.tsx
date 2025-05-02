@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { getRecentPosts, getCategoriesAndTags } from '@/services/posts';
+import PostCoverImage from '@/components/post-cover-image';
 
 export const metadata = {
   title: 'Welcome | 愛をもって、人生を楽しみ尽くす',
@@ -97,22 +98,12 @@ export default async function HomePage() {
             <ul className="space-y-6">
               {recentPosts.map(post => (
                 <li key={post.id} className="border-b border-gray-100 pb-4">
-                  <Link href={`/posts/${post.slug}`} className="block group">
-                    {post.cover && (
-                      <div className="relative h-48 mb-3 overflow-hidden rounded-lg">
-                        <Image 
-                          src={post.cover} 
-                          alt={post.title}
-                          fill
-                          style={{ objectFit: 'cover' }}
-                          className="transition-transform group-hover:scale-105"
-                          sizes="(max-width: 768px) 100vw, 50vw"
-                          loading="lazy"
-                          placeholder="blur"
-                          blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAEtAJJXIDTjwAAAABJRU5ErkJggg=="
-                        />
-                      </div>
-                    )}
+                  <Link href={`/blog/${post.slug}`} className="block group">
+                    <PostCoverImage 
+                      src={post.cover} 
+                      alt={post.title} 
+                      className="mb-3"
+                    />
                     <h3 className="text-xl font-semibold group-hover:text-blue-600 transition-colors">{post.title}</h3>
                     {post.date && (
                       <p className="text-sm text-gray-500 mt-1">{new Date(post.date).toLocaleDateString('ja-JP')}</p>

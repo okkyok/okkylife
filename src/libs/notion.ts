@@ -217,16 +217,42 @@ export async function getRecordMap(id: string) {
   }
 }
 
+// グローバルキャッシュの型定義
+declare global {
+  var __NOTION_FILE_CACHE: Record<string, string> | undefined;
+}
+
 /**
- * 画像URLをマッピングする関数
+ * 画像URLをマッピングする関数 - 最適化版
+ * Notionの画像URLを適切に処理し、Next.jsの画像最適化に対応させる
  */
 export function mapImageUrl(url: string, block: Block): string | null {
   const fallbackImage = '/placeholder-image.jpg';
+  
   try {
     // 基本的なバリデーション
-    if (!url || typeof url !== 'string') {
-      console.log('Invalid URL:', url);
+    if (!url) {
       return fallbackImage;
+    }
+    
+    // URLがオブジェクトの場合（Notionの内部構造）
+    if (typeof url !== 'string') {
+      // @ts-ignore
+      if (url && url.url) {
+        // @ts-ignore
+        return url.url;
+      }
+      return fallbackImage;
+    }
+    
+    // キャッシュの初期化
+    if (typeof global !== 'undefined' && !global.__NOTION_FILE_CACHE) {
+      global.__NOTION_FILE_CACHE = {};
+    }
+    
+    // キャッシュにあればそれを使用
+    if (typeof global !== 'undefined' && global.__NOTION_FILE_CACHE && global.__NOTION_FILE_CACHE[url]) {
+      return global.__NOTION_FILE_CACHE[url];
     }
     
     // データURLはそのまま返す
@@ -234,113 +260,68 @@ export function mapImageUrl(url: string, block: Block): string | null {
       return url;
     }
     
-    // URLがオブジェクトの場合（Notionの内部構造）
-    if (typeof url === 'object' && url !== null) {
-      console.log('URL is an object:', url);
-      // @ts-ignore
-      if (url.url) {
-        // @ts-ignore
-        return url.url;
-      }
-      return fallbackImage;
+    // Unsplash画像は直接返す
+    if (url.startsWith('https://images.unsplash.com')) {
+      return url;
     }
     
     // attachment:形式のURLを処理（Notionの添付ファイル）
     if (url.startsWith('attachment:')) {
-      console.log(`Processing attachment URL: ${url}`);
-      
       try {
-        // まずキャッシュを確認
-        if (!global.__NOTION_FILE_CACHE) {
-          global.__NOTION_FILE_CACHE = {};
-        }
-        
-        // キャッシュにあればそれを使用
-        if (global.__NOTION_FILE_CACHE[url]) {
-          console.log(`Using cached URL for ${url}: ${global.__NOTION_FILE_CACHE[url]}`);
-          return global.__NOTION_FILE_CACHE[url];
-        }
-        
-        // ブロックから基本的な情報を取得
-        const blockId = block?.id;
-        
         // attachment:ID:filename.jpg 形式からIDとファイル名を抽出
         const match = url.match(/attachment:([^:]+):(.+)/);
         if (!match) {
-          console.warn(`Invalid attachment URL format: ${url}`);
           return fallbackImage;
         }
         
         const [_, fileId, fileName] = match;
+        const blockId = block?.id || fileId;
         
-        // ブロックからファイル情報を取得
+        // ブロックからファイル情報を取得（複数の場所を確認）
+        // 1. page_cover_files
         if (block?.format?.page_cover_files) {
-          const files = block.format.page_cover_files;
-          for (const file of files) {
+          for (const file of block.format.page_cover_files) {
             if (file.file_id === fileId) {
-              console.log(`Found matching file in block.format.page_cover_files: ${file.url}`);
-              // キャッシュに保存
-              global.__NOTION_FILE_CACHE[url] = file.url;
-              return file.url;
+              const result = file.url;
+              if (typeof global !== 'undefined' && global.__NOTION_FILE_CACHE) {
+                global.__NOTION_FILE_CACHE[url] = result;
+              }
+              return result;
             }
           }
         }
         
-        // ブロックのプロパティからファイル情報を取得
+        // 2. properties.files
         if (block?.properties?.files) {
-          const files = block.properties.files;
-          for (const file of files) {
+          for (const file of block.properties.files) {
             if (file.id === fileId || file.file_id === fileId) {
-              console.log(`Found matching file in block.properties.files: ${file.url}`);
-              // キャッシュに保存
-              global.__NOTION_FILE_CACHE[url] = file.url;
-              return file.url;
+              const result = file.url;
+              if (typeof global !== 'undefined' && global.__NOTION_FILE_CACHE) {
+                global.__NOTION_FILE_CACHE[url] = result;
+              }
+              return result;
             }
           }
         }
         
-        // ブロックのformatからファイル情報を取得
+        // 3. format.files
         if (block?.format?.files) {
-          const files = block.format.files;
-          for (const file of files) {
+          for (const file of block.format.files) {
             if (file.id === fileId || file.file_id === fileId) {
-              console.log(`Found matching file in block.format.files: ${file.url}`);
-              // キャッシュに保存
-              global.__NOTION_FILE_CACHE[url] = file.url;
-              return file.url;
+              const result = file.url;
+              if (typeof global !== 'undefined' && global.__NOTION_FILE_CACHE) {
+                global.__NOTION_FILE_CACHE[url] = result;
+              }
+              return result;
             }
           }
         }
         
-        // ブロックから情報が取得できなかった場合は、署名付きURLを生成
-        // これは以前の実装で動作していた方法
-        
-        // Notionのイメージプロキシを使用する方法（最も信頼性が高い）
-        // secure.notion-static.comドメインへの直接アクセスはCORS制限があるため避ける
-        
-        // ファイル名から拡張子を取得
-        const extension = fileName.split('.').pop() || 'jpg';
-        
-        // 安全なファイル名を生成
-        const safeFileName = `${fileId}.${extension}`;
-        console.log(`Generated safe file name: ${safeFileName}`);
-        
-        // Notionのイメージプロキシを使用（最も信頼性が高い方法）
-        // URLをエンコードして、Notionのイメージプロキシを通す
+        // ブロックから情報が取得できなかった場合は、Notionのイメージプロキシを使用
         const encodedUrl = encodeURIComponent(`https://secure.notion-static.com/${fileId}/${encodeURIComponent(fileName)}`);
-        const imageUrl = `https://www.notion.so/image/${encodedUrl}?table=block&id=${blockId || fileId}&cache=v2`;
-        console.log(`Generated Notion image URL: ${imageUrl}`);
+        const imageUrl = `https://www.notion.so/image/${encodedUrl}?table=block&id=${blockId}&cache=v2`;
         
-        // バックアップとしてS3 URLも生成（直接アクセスできない場合が多いが保持）
-        const s3Url = `https://s3.us-west-2.amazonaws.com/secure.notion-static.com/${fileId}/${encodeURIComponent(fileName)}`;
-        console.log(`Generated S3 URL as backup: ${s3Url}`);
-        
-        // フォールバックとしてプロフィール画像を使用
-        const fallbackUrl = '/images/profile/profile-image.jpg';
-        console.log(`Using profile image as fallback: ${fallbackUrl}`);
-        
-        // キャッシュに保存してNotionイメージプロキシURLを返す（より信頼性が高い）
-        if (global.__NOTION_FILE_CACHE) {
+        if (typeof global !== 'undefined' && global.__NOTION_FILE_CACHE) {
           global.__NOTION_FILE_CACHE[url] = imageUrl;
         }
         return imageUrl;
@@ -350,27 +331,61 @@ export function mapImageUrl(url: string, block: Block): string | null {
       }
     }
     
-    // Unsplash画像は直接返す
-    if (url.startsWith('https://images.unsplash.com')) {
-      return url;
+    // 既に署名されたAmazon S3 URLの場合はそのまま返す
+    try {
+      const u = new URL(url);
+      if (
+        u.pathname.startsWith('/secure.notion-static.com') &&
+        u.hostname.endsWith('.amazonaws.com') &&
+        u.searchParams.has('X-Amz-Credential') &&
+        u.searchParams.has('X-Amz-Signature') &&
+        u.searchParams.has('X-Amz-Algorithm')
+      ) {
+        return url;
+      }
+    } catch {
+      // 無効なURLは無視
     }
     
     // Notionの相対パスを絶対URLに変換
     if (url.startsWith('/')) {
-      const notionUrl = `https://www.notion.so${url}`;
-      console.log(`Converted relative Notion path to absolute URL: ${notionUrl}`);
-      return notionUrl;
+      if (url.startsWith('/images')) {
+        return `https://www.notion.so${url}`;
+      }
+      
+      // Notionのイメージプロキシを使用
+      const notionImageUrl = `https://www.notion.so${
+        url.startsWith('/image') ? url : `/image/${encodeURIComponent(url)}`
+      }`;
+      
+      // ブロック情報を追加
+      try {
+        const notionImageUrlV2 = new URL(notionImageUrl);
+        let table = block.parent_table === 'space' ? 'block' : block.parent_table;
+        if (table === 'collection' || table === 'team') {
+          table = 'block';
+        }
+        notionImageUrlV2.searchParams.set('table', table);
+        notionImageUrlV2.searchParams.set('id', block.id);
+        notionImageUrlV2.searchParams.set('cache', 'v2');
+        
+        const result = notionImageUrlV2.toString();
+        if (typeof global !== 'undefined' && global.__NOTION_FILE_CACHE) {
+          global.__NOTION_FILE_CACHE[url] = result;
+        }
+        return result;
+      } catch {
+        return notionImageUrl;
+      }
     }
-    
     
     // Notionの画像URLを処理
     if (url.includes('notion-static.com') || url.includes('secure.notion-static.com')) {
-      console.log(`Notion static image detected: ${url}`);
       return url;
     }
     
     // S3画像は直接返す
-    if (url.includes('s3-us-west-2.amazonaws.com') || url.includes('amazonaws.com')) {
+    if (url.includes('amazonaws.com')) {
       return url;
     }
     
@@ -379,9 +394,27 @@ export function mapImageUrl(url: string, block: Block): string | null {
       return url;
     }
     
-    // その他の場合はプレースホルダー画像を返す
-    console.log(`Unrecognized URL format: ${url}, using fallback`);
-    return fallbackImage;
+    // Notionのイメージプロキシを通す
+    try {
+      const notionImageUrl = `https://www.notion.so/image/${encodeURIComponent(url)}`;
+      const notionImageUrlV2 = new URL(notionImageUrl);
+      let table = block.parent_table === 'space' ? 'block' : block.parent_table;
+      if (table === 'collection' || table === 'team') {
+        table = 'block';
+      }
+      notionImageUrlV2.searchParams.set('table', table);
+      notionImageUrlV2.searchParams.set('id', block.id);
+      notionImageUrlV2.searchParams.set('cache', 'v2');
+      
+      const result = notionImageUrlV2.toString();
+      if (typeof global !== 'undefined' && global.__NOTION_FILE_CACHE) {
+        global.__NOTION_FILE_CACHE[url] = result;
+      }
+      return result;
+    } catch {
+      // その他の場合はプレースホルダー画像を返す
+      return fallbackImage;
+    }
   } catch (error) {
     console.error('Error mapping image URL:', error);
     // エラーが発生した場合はプレースホルダー画像を返す

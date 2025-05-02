@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import NotionPage from '@/components/notion-page';
+import PostCoverImage from '@/components/post-cover-image';
 import RelatedPosts from '@/components/posts/related-posts';
 import { getRecordMap } from '@/libs/notion';
 import { getAllPostsFromNotion } from '@/services/posts';
@@ -51,14 +52,12 @@ export default async function PostPage({
         data-revalidated-at={new Date().getTime()}
         className="mt-4 flex flex-col items-center md:mt-20"
       >
-        <div className="relative aspect-[3/2] w-[90vw] max-w-[900px]">
-          <Image
+        <div className="w-[90vw] max-w-[900px]">
+          <PostCoverImage
             src={post.cover}
-            alt="cover"
-            fill
-            style={{ objectFit: 'contain' }}
-            placeholder="blur"
-            blurDataURL={post.blurUrl}
+            alt={post.title}
+            className="aspect-[3/2] h-auto"
+            priority
           />
         </div>
         <NotionPage post={post} recordMap={recordMap} />
@@ -90,7 +89,7 @@ export async function generateMetadata({
         openGraph: {
           images: [
             {
-              url: post.cover,
+              url: post.cover || '/placeholder-image.jpg',
               width: 400,
               height: 300,
             },

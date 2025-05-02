@@ -15,12 +15,24 @@ const nextConfig = {
     // optimizeCssとturbotraceはビルド時間が長くなる可能性があるので無効化
   },
 
-  // 画像最適化 - 完全に修正した版
+  // 画像最適化 - 完全に最適化した版
   images: {
+    // Notionの画像ドメインを明示的に許可
     remotePatterns: [
+      // Notionのプロキシドメイン
       {
         protocol: 'https',
         hostname: 'www.notion.so',
+      },
+      // Notionの静的ファイルドメイン
+      {
+        protocol: 'https',
+        hostname: 'secure.notion-static.com',
+      },
+      // Notionが使用するAWSドメイン
+      {
+        protocol: 'https',
+        hostname: 's3.us-west-2.amazonaws.com',
       },
       {
         protocol: 'https',
@@ -28,40 +40,26 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 's3.us-west-2.amazonaws.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'secure.notion-static.com',
-      },
-      {
-        protocol: 'https',
         hostname: 'prod-files-secure.s3.us-west-2.amazonaws.com',
       },
+      // 署名付きAWSリクエスト用
       {
         protocol: 'https',
         hostname: '*.amazonaws.com',
       },
-      {
-        protocol: 'https',
-        hostname: 'notion-static.com',
-        pathname: '/**',
-      },
     ],
-    // 画像最適化を有効化（以前の動作していた設定に戻す）
+    // 画像最適化を有効化
     unoptimized: false,
-    // Notionの添付ファイルURLをサポート
+    // SVGとセキュリティ設定
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-    // 画像キャッシュの強化
+    // 画像キャッシュの強化（ビルド時間短縮とパフォーマンス向上）
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30日間キャッシュ
-    // 画像最適化の設定
+    // 画像最適化の設定（必要最小限のサイズに絞る）
     formats: ['image/webp'],
-    deviceSizes: [640, 750, 828, 1080, 1200], // デバイスサイズを減らす
-    imageSizes: [16, 32, 48, 64, 96], // 画像サイズを減らす
-    // ローカル環境でのデバッグ用に全てのドメインを許可
-    domains: ['*'],
+    deviceSizes: [640, 750, 828, 1080], // 必要なデバイスサイズのみ
+    imageSizes: [32, 64, 96], // 必要な画像サイズのみ
   },
 
   // ビルド時間の制限
