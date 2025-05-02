@@ -126,19 +126,6 @@ function getPropertyUrl(property: NotionPropertyValue | undefined): string {
 }
 
 export async function getAllPostsFromNotion() {
-  // メモリキャッシュを確認（ビルド時のパフォーマンス向上）
-  if (global.__ALL_POSTS_CACHE) {
-    const cacheTime = global.__POSTS_FETCH_TIME || 0;
-    const now = Date.now();
-    const cacheAge = (now - cacheTime) / 1000 / 60; // 分単位
-    
-    // キャッシュが30分以内なら再利用（デプロイ中の再取得を防止）
-    if (cacheAge < 30) {
-      console.log(`Using cached posts data (${cacheAge.toFixed(1)} minutes old)`);
-      return global.__ALL_POSTS_CACHE;
-    }
-  }
-  
   const allPosts: Post[] = [];
   const notionDbId = process.env.NOTION_DATABASE_ID;
   
@@ -148,23 +135,8 @@ export async function getAllPostsFromNotion() {
   
   try {
     console.log(`Fetching Notion database: ${notionDbId}`);
-    
-    // デプロイ環境でのエラーを減らすためにタイムアウトを延長
     const recordMap = await getRecordMap(notionDbId) as RecordMap;
-    
-    // recordMapのバリデーション
-    if (!recordMap) {
-      console.error('Failed to get record map: Record map is null or undefined');
-      return [];
-    }
-    
     const { block, collection } = recordMap;
-    
-    // ブロックが存在しない場合のエラーハンドリング
-    if (!block || Object.keys(block).length === 0) {
-      console.error('Notion blocks not found. Check your database ID and permissions.');
-      return [];
-    }
     
     // コレクションが存在しない場合のエラーハンドリング
     if (!collection || Object.keys(collection).length === 0) {
@@ -199,29 +171,11 @@ export async function getAllPostsFromNotion() {
     const blockCount = Object.keys(block).length;
     console.log(`Processing ${blockCount} blocks from Notion database`);
     
-    // Missing blockの総数をカウント
-    let totalMissingBlocks = 0;
-    Object.keys(block).forEach(id => {
-      if (!block[id]?.value) totalMissingBlocks++;
-    });
-    
-    if (totalMissingBlocks > 0) {
-      console.warn(`Found ${totalMissingBlocks} missing blocks out of ${blockCount} total blocks`);
-    }
-    
-    // Missing blockの数を制限してログ出力を減らす
-    let loggedMissingBlocks = 0;
-    const maxMissingBlockLogs = 10; // 全体で最大10件のMissing blockログを出力
-    
     Object.keys(block).forEach((pageId) => {
       try {
         const blockValue = block[pageId]?.value as BlockValue;
         if (!blockValue) {
-          // Missing blockログを制限
-          if (loggedMissingBlocks < maxMissingBlockLogs) {
-            console.warn(`Missing block value for pageId: ${pageId}`);
-            loggedMissingBlocks++;
-          }
+          console.warn(`Missing block value for pageId: ${pageId}`);
           return;
         }
       
@@ -237,32 +191,14 @@ export async function getAllPostsFromNotion() {
 
           // コンテンツの安全な取得
           const contents = blockValue.content || [];
-          
-          // Missing blockのカウントを制限（デプロイ時のログ量を減らすため）
-          let missingBlockCount = 0;
-          const maxPageMissingBlockLogs = 3; // ページごとに最大3件のMissing blockログを出力
-          
           const dates = contents.map((content) => {
             if (!block[content] || !block[content]?.value) {
-              // Missing blockがある場合は限定的にログ出力
-              missingBlockCount++;
-              if (missingBlockCount <= maxPageMissingBlockLogs && loggedMissingBlocks < maxMissingBlockLogs) {
-                console.warn(`Missing block reference: ${content} in page ${pageId}`);
-                loggedMissingBlocks++;
-              } else if (missingBlockCount === maxPageMissingBlockLogs + 1 && loggedMissingBlocks < maxMissingBlockLogs) {
-                console.warn(`Additional missing blocks in page ${pageId} will not be logged individually`);
-                loggedMissingBlocks++;
-              }
+              // Missing blockがある場合はログ出力するが処理は続行
+              console.warn(`Missing block reference: ${content} in page ${pageId}`);
               return null;
             }
             return block[content]?.value?.last_edited_time;
           }).filter(Boolean) as number[];
-          
-          // ページ全体のMissing block数をログ（ただし制限付き）
-          if (missingBlockCount > 0 && loggedMissingBlocks < maxMissingBlockLogs) {
-            console.warn(`Total missing blocks in page ${pageId}: ${missingBlockCount} out of ${contents.length}`);
-            loggedMissingBlocks++;
-          }
           
           if (last_edited_time) {
             dates.push(last_edited_time);
@@ -426,21 +362,9 @@ export async function getAllPostsFromNotion() {
     });
 
     console.log(`Successfully processed ${allPosts.length} posts from Notion`);
-    
-    // メモリキャッシュに保存（デプロイ時の再取得を防止）
-    global.__ALL_POSTS_CACHE = allPosts;
-    global.__POSTS_FETCH_TIME = Date.now();
-    
     return allPosts;
   } catch (error) {
     console.error('Failed to fetch posts from Notion:', error);
-    
-    // キャッシュがあれば古いデータを返す（フォールバック）
-    if (global.__ALL_POSTS_CACHE) {
-      console.log('Using cached posts data as fallback due to error');
-      return global.__ALL_POSTS_CACHE;
-    }
-    
     return [];
   }
 }
@@ -464,8 +388,6 @@ export type Tag = {
 declare global {
   var __RECENT_POSTS_CACHE: Post[] | undefined;
   var __CATEGORIES_TAGS_CACHE: { categories: Category[], tags: Tag[] } | undefined;
-  var __ALL_POSTS_CACHE: Post[] | undefined;
-  var __POSTS_FETCH_TIME: number | undefined;
 }
 
 /**
@@ -530,32 +452,17 @@ export async function getPostsByCategory(categorySlug: string): Promise<Post[]> 
     const categoryName = categoryInfo.name;
     
     // 公開済みで指定されたカテゴリの投稿のみをフィルタリング
-    const filteredPosts = allPosts
-      .filter(post => {
-        // 無効なデータをチェック
-        if (!post.published) return false;
-        if (!post.categories || !Array.isArray(post.categories)) return false;
-        
-        // カテゴリ名が一致するかチェック
-        return post.categories.includes(categoryName);
-      })
+    return allPosts
+      .filter(post => 
+        post.published && 
+        post.categories && 
+        post.categories.includes(categoryName)
+      )
       .sort((a, b) => {
-        // 日付の安全な取得
-        const getTime = (post: Post) => {
-          try {
-            return new Date(post.date || post.lastEditedAt || Date.now()).getTime();
-          } catch (e) {
-            return Date.now(); // 日付が無効な場合は現在時刻を使用
-          }
-        };
-        
-        const dateA = getTime(a);
-        const dateB = getTime(b);
+        const dateA = new Date(a.date || a.lastEditedAt).getTime();
+        const dateB = new Date(b.date || b.lastEditedAt).getTime();
         return dateB - dateA;
       });
-      
-    console.log(`Found ${filteredPosts.length} posts for category "${categoryName}" (slug: ${categorySlug})`);
-    return filteredPosts;
   } catch (error) {
     console.error(`カテゴリスラッグ "${categorySlug}" の投稿取得エラー:`, error);
     return [];

@@ -7,89 +7,12 @@ import {
 
 // 必要なモジュールを直接インポート
 import { NotionAPI } from 'notion-client';
-import { Client } from '@notionhq/client';
+import { Block } from 'notion-types';
 
-// クライアントサイドではダミーオブジェクトを使用
-const isServer = typeof window === 'undefined';
-
-// Notion APIのレスポンス型を定義
-type FileObject = {
-  url: string;
-  expiry_time?: string;
-};
-
-type FileWithCaption = {
-  file: FileObject;
-  caption?: Array<any>;
-  type?: 'file';
-};
-
-type ExternalFileWithCaption = {
-  url: string;
-  caption?: Array<any>;
-};
-
-type PageCover = {
-  type: 'file' | 'external';
-  file?: FileObject;
-  external?: ExternalFileWithCaption;
-};
-
-// ページブロックの型定義
-type PageBlock = {
-  id: string;
-  type: string;
-  object: string;
-  cover?: PageCover;
-};
-
-// キャッシュの型定義
-declare global {
-  var __NOTION_FILE_CACHE: Record<string, string> | undefined;
-}
-
-// サーバーサイドでのみ初期化されるNotionクライアント
-let notionClient: any = null;
-let notion: any = null;
-
-// サーバーサイドでのみ実行
-if (typeof window === 'undefined') {
-  try {
-    // 公式Notion APIクライアントの初期化
-    notionClient = new Client({
-      auth: process.env.NOTION_API_KEY,
-    });
-    
-    // NotionAPIクライアントの初期化（オプション強化版）
-    notion = new NotionAPI({
-      authToken: process.env.NOTION_AUTH_TOKEN,
-      activeUser: process.env.NOTION_USER_ID, // ユーザーIDがあれば設定
-      userTimeZone: 'Asia/Tokyo', // タイムゾーンを設定
-    });
-  } catch (error) {
-    console.error('Failed to initialize Notion clients:', error);
-  }
-}
-
-// メモリキャッシュの型定義
-declare global {
-  var __NOTION_PAGE_CACHE: Record<string, any> | undefined;
-}
-
-// エラー発生時のログ出力用関数
-function logNotionError(error: any) {
-  console.error('Notion API Error:', error?.message || 'Unknown error');
-  
-  // エラーの詳細情報をログ出力（デプロイ時のトラブルシューティング用）
-  if (error?.stack) {
-    console.error('Error stack:', error.stack.split('\n').slice(0, 3).join('\n'));
-  }
-  
-  // レート制限エラーかどうかを確認
-  if (error?.statusCode === 429 || (error?.message && error?.message.includes('rate'))) {
-    console.error('Rate limit error detected. Consider adding delay between requests.');
-  }
-}
+// Initialize the Notion API client
+const notion = new NotionAPI({
+  authToken: process.env.NOTION_AUTH_TOKEN,
+});
 
 /**
  * Retry function with exponential backoff
@@ -128,8 +51,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay =
 }
 
 /**
- * Notionページのレコードマップを取得する（リトライ機能付き）
- * デプロイ環境でのMissing blockエラーを軽減するための最適化を含む
+ * Get Notion page record map with retry mechanism for rate limiting
  */
 export async function getRecordMap(id: string) {
   if (!id) {
@@ -137,99 +59,43 @@ export async function getRecordMap(id: string) {
   }
   
   try {
-    console.log(`Fetching Notion database with ID: ${id}`);
+    // Use the retry mechanism when fetching from Notion
+    const recordMap = await withRetry(() => notion.getPage(id));
     
-    // キャッシュキーを生成
-    const cacheKey = `notion_page_${id}`;
-    
-    // メモリキャッシュがあれば使用（デプロイ時のパフォーマンス向上）
-    // @ts-ignore
-    if (global.__NOTION_PAGE_CACHE && global.__NOTION_PAGE_CACHE[cacheKey]) {
-      // @ts-ignore
-      console.log(`Using cached Notion data for ${id}`);
-      // @ts-ignore
-      return global.__NOTION_PAGE_CACHE[cacheKey];
-    }
-    
-    // 拡張オプションを使用してNotionページを取得
-    const options = {
-      // 再帰的な深さを制限して必要なデータのみ取得（パフォーマンス向上）
-      maxDepth: 3,
-      // 署名付きURLを取得（アクセス権限の問題を軽減）
-      signFileUrls: true,
-      // タイムアウトを延長（デプロイ環境での問題を軽減）
-      timeout: 60000, // 60秒
-    };
-    
-    // リトライ回数と初期待機時間を増やして信頼性を向上
-    const maxRetries = 7;  // 最大リトライ回数を増やす
-    const initialDelay = 3000;  // 初期待機時間を長めに設定
-    
-    try {
-      // リトライ機能を使用してNotionからデータを取得
-      const recordMap = await withRetry(
-        () => notion.getPage(id, options), 
-        maxRetries, 
-        initialDelay
-      );
-    
-    // レコードマップのバリデーション
+    // Validate the record map to ensure it has the necessary data
     if (!recordMap) {
       console.error(`Failed to get record map for page ${id}: Record map is null or undefined`);
       throw new Error(`Failed to get record map for page ${id}`);
     }
     
-    // ブロックの存在確認
-    if (!recordMap.block || Object.keys(recordMap.block).length === 0) {
-      console.error(`No blocks found in record map for page ${id}`);
-      throw new Error(`No blocks found for page ${id}`);
-    }
-    
-    // Missing blockの数をカウントして警告をログ出力（ログ量を制限）
+    // Check for missing blocks and log warnings
     if (recordMap.block) {
+      const missingBlocks = [];
       const blockKeys = Object.keys(recordMap.block);
-      const totalBlocks = blockKeys.length;
       
-      // Missing blockをカウント
-      const missingBlocks = blockKeys.filter(blockId => !recordMap.block[blockId]?.value);
-      const missingBlockCount = missingBlocks.length;
-      
-      // 警告ログを出力（ただし量を制限）
-      if (missingBlockCount > 0) {
-        const missingRatio = (missingBlockCount / totalBlocks * 100).toFixed(1);
-        console.warn(`Found ${missingBlockCount} missing blocks out of ${totalBlocks} total blocks (${missingRatio}%)`);
-        
-        // 最初の数個のMissing blockのみログ出力
-        if (missingBlockCount > 5) {
-          console.warn(`Sample missing blocks: ${missingBlocks.slice(0, 5).join(', ')}...`);
-        } else {
-          console.warn(`Missing blocks: ${missingBlocks.join(', ')}`);
+      // Count missing blocks (blocks with undefined values)
+      for (const blockId in recordMap.block) {
+        if (!recordMap.block[blockId]?.value) {
+          missingBlocks.push(blockId);
         }
       }
       
-      console.log(`Successfully fetched Notion page with ${totalBlocks - missingBlockCount} valid blocks`);
+      // Log warning if there are missing blocks
+      if (missingBlocks.length > 0) {
+        console.warn(`Found ${missingBlocks.length} missing blocks out of ${blockKeys.length} total blocks`);
+        // Only log the first few missing blocks to avoid excessive logging
+        if (missingBlocks.length > 5) {
+          console.warn(`First 5 missing block IDs: ${missingBlocks.slice(0, 5).join(', ')}...`);
+        } else {
+          console.warn(`Missing block IDs: ${missingBlocks.join(', ')}`);
+        }
+      }
     }
     
-      // メモリキャッシュに保存
-      // @ts-ignore
-      if (!global.__NOTION_PAGE_CACHE) {
-        // @ts-ignore
-        global.__NOTION_PAGE_CACHE = {};
-      }
-      // @ts-ignore
-      global.__NOTION_PAGE_CACHE[cacheKey] = recordMap;
-      
-      return recordMap;
-    } catch (error) {
-      // エラーログを出力
-      logNotionError(error);
-      console.error(`Failed to fetch Notion page ${id} after ${maxRetries} retries`);
-      throw error;
-    }
+    return recordMap;
   } catch (error) {
-    console.error(`Error fetching Notion page ${id}:`);
-    logNotionError(error);
-    // エラーを再スローして呼び出し元で処理できるようにする
+    console.error(`Error fetching Notion page ${id}:`, error);
+    // Rethrow to allow the caller to handle the error
     throw error;
   }
 }
