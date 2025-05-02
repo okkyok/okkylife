@@ -48,8 +48,8 @@ const nextConfig = {
         pathname: '/**',
       },
     ],
-    // 全ての画像を最適化なしで表示（ローカル環境での問題を解決）
-    unoptimized: true,
+    // 画像最適化を有効化（以前の動作していた設定に戻す）
+    unoptimized: false,
     // Notionの添付ファイルURLをサポート
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',

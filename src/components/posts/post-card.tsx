@@ -34,7 +34,6 @@ export default function PostCard({
                     alt={`${title}のカバー画像`}
                     fill
                     style={{ objectFit: 'cover' }}
-                    unoptimized={true}
                     priority={true}
                     {...(cover && blurUrl ? {
                       placeholder: "blur",
@@ -63,7 +62,6 @@ export default function PostCard({
                   alt={`${title}のカバー画像`}
                   fill
                   style={{ objectFit: 'cover' }}
-                  unoptimized={true}
                   priority={true}
                   {...(cover && blurUrl ? {
                     placeholder: "blur",
