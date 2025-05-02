@@ -196,11 +196,22 @@ export function mapImageUrl(url: string, block: Block): string | null {
     }
     
     // S3画像は直接返す
-    if (url.includes('s3-us-west-2.amazonaws.com')) {
+    if (url.includes('s3-us-west-2.amazonaws.com') || url.includes('amazonaws.com')) {
+      return url;
+    }
+    
+    // 外部画像URLはそのまま返す
+    if (url.startsWith('https://') || url.startsWith('http://')) {
       return url;
     }
 
     try {
+      // 相対パスの場合は絶対パスに変換
+      if (url.startsWith('/')) {
+        url = `https://www.notion.so${url}`;
+        return url;
+      }
+      
       const u = new URL(url);
 
       // 署名済みAmazon S3 URLの処理
@@ -220,55 +231,21 @@ export function mapImageUrl(url: string, block: Block): string | null {
       
       // Notion CDN URLの処理
       if (u.hostname === 'www.notion.so' || u.hostname === 'notion.so') {
-        // すでにNotion URLの場合は処理を続行
-      } else if (u.protocol === 'https:' || u.protocol === 'http:') {
-        // 外部URLの場合はNotion経由でプロキシ
-        url = `https://www.notion.so/image/${encodeURIComponent(url)}`;
-      } else {
-        // 無効なプロトコルの場合はフォールバック
-        console.warn(`Invalid URL protocol: ${u.protocol}, using fallback`);
-        return fallbackImage;
+        // すでにNotion URLの場合はそのまま返す
+        return url;
       }
     } catch (error) {
-      console.warn(`Invalid URL in mapImageUrl: ${url}, using fallback`, error);
-      return fallbackImage;
+      // URL解析エラーの場合、元のURLをそのまま返す
+      console.warn(`Invalid URL in mapImageUrl: ${url}, returning as-is`);
+      return url;
     }
 
-    // Notion内部画像パスの処理
-    if (url.startsWith('/images')) {
-      url = `https://www.notion.so${url}`;
-    } else if (!url.startsWith('https://www.notion.so')) {
-      url = `https://www.notion.so${url.startsWith('/image') ? url : `/image/${encodeURIComponent(url)}`}`;
-    }
-
-    try {
-      // Notion画像URLのパラメータ設定
-      const notionImageUrlV2 = new URL(url);
-      let table = block?.parent_table === 'space' ? 'block' : (block?.parent_table || 'block');
-      if (table === 'collection' || table === 'team') {
-        table = 'block';
-      }
-      
-      // ブロックIDが無効な場合のチェック
-      if (!block?.id) {
-        console.warn('Missing block ID for image URL, using fallback');
-        return fallbackImage;
-      }
-      
-      notionImageUrlV2.searchParams.set('table', table);
-      notionImageUrlV2.searchParams.set('id', block.id);
-      notionImageUrlV2.searchParams.set('cache', 'v2');
-      
-      // 最終的なURL生成
-      const finalUrl = notionImageUrlV2.toString();
-      return finalUrl || fallbackImage;
-    } catch (error) {
-      console.error(`Error creating Notion image URL for ${url}:`, error);
-      return fallbackImage;
-    }
+    // その他の場合は元のURLをそのまま返す
+    return url || fallbackImage;
   } catch (error) {
     console.error('Error mapping image URL:', error);
-    return fallbackImage;
+    // エラーが発生した場合も元のURLを返す
+    return url || fallbackImage;
   }
 }
 

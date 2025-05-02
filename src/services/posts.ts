@@ -358,9 +358,14 @@ export async function getRecentPosts(): Promise<Post[]> {
       return dateB - dateA;
     });
     
-    // 直近の投稿を返す（最大5件）
-    const recentPosts = sortedPosts
-      .slice(0, 5);
+    // 直近1ヶ月分の投稿をフィルタリング
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    const recentPosts = sortedPosts.filter(post => {
+      const postDate = new Date(post.date || post.lastEditedAt);
+      return postDate >= oneMonthAgo;
+    });
     
     // メモリキャッシュに保存
     global.__RECENT_POSTS_CACHE = recentPosts;
