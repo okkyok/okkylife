@@ -189,6 +189,13 @@ export function mapImageUrl(url: string, block: Block): string | null {
     if (url.startsWith('data:')) {
       return url;
     }
+    
+    // attachment:形式のURLを処理（Notionの添付ファイル）
+    if (url.startsWith('attachment:')) {
+      // 添付ファイルのURLをそのまま返す（Next.jsの設定で処理）
+      console.log(`Handling attachment URL: ${url}`);
+      return url;
+    }
 
     // Unsplash画像は直接返す
     if (url.startsWith('https://images.unsplash.com')) {

@@ -27,12 +27,19 @@ const nextConfig = {
         hostname: 's3-us-west-2.amazonaws.com',
       },
     ],
+    // Notionの添付ファイルURLをサポート
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     // 画像キャッシュの強化
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30日間キャッシュ
     // 画像最適化の設定
     formats: ['image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200], // デバイスサイズを減らす
     imageSizes: [16, 32, 48, 64, 96], // 画像サイズを減らす
+    // Notionの添付ファイルURLを許可
+    domains: [''],
+    unoptimized: true,
   },
 
   // ビルド時間の制限

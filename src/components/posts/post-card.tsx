@@ -20,7 +20,8 @@ export default function PostCard({
             alt="cover image"
             fill
             style={{ objectFit: 'cover' }}
-            {...(cover && blurUrl ? {
+            unoptimized={cover?.startsWith('attachment:') ? true : false} /* attachment:形式のURLは最適化を無効化 */
+            {...(cover && blurUrl && !cover.startsWith('attachment:') ? {
               placeholder: "blur",
               blurDataURL: blurUrl
             } : {})}
