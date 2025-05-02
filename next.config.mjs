@@ -1,14 +1,29 @@
 // @plaiceholderをインポートしない - ビルド時の画像処理を行わないため
 import { fileURLToPath } from 'url';
-import path from 'path';
+import { dirname, join } from 'path';
 import os from 'os';
 
 // ES Moduleでのパス解決用ヘルパー
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // セキュリティヘッダーの設定
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            // unsafe-evalを追加して警告を解消
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.notion.so https://*.notion-static.com https://*.amazonaws.com https://* http://*; font-src 'self' data:; connect-src 'self' https://* http://*;",
+          },
+        ],
+      },
+    ];
+  },
   // 最新のNext.js設定を使用
   experimental: {
     // 実験的機能を最小限にしてビルドを高速化
@@ -47,6 +62,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: '*.amazonaws.com',
       },
+      // 任意のドメインを許可（開発環境用）
+      {
+        protocol: 'https',
+        hostname: '*',
+      },
     ],
     // 画像最適化を有効化
     unoptimized: false,
@@ -60,6 +80,7 @@ const nextConfig = {
     formats: ['image/webp'],
     deviceSizes: [640, 750, 828, 1080], // 必要なデバイスサイズのみ
     imageSizes: [32, 64, 96], // 必要な画像サイズのみ
+    domains: ['*'], // すべてのドメインを許可（開発環境用）
   },
 
   // ビルド時間の制限

@@ -5,6 +5,7 @@ import 'react-notion-x/src/styles.css';
 import Header from '@/components/header/header';
 import Provider from '@/components/provider';
 import ScrollUpButton from '@/components/scroll-up-button';
+import { FormFieldFixer } from '@/app/form-fix';
 import '@/styles/globals.css';
 import '@/styles/paginate.css';
 
@@ -36,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ko">
+    <html lang="ja">
       <body className="text-primary bg-primary relative mx-auto mb-20 flex w-full max-w-screen-xl flex-col px-[10vw] md:px-[5vw]">
         <Provider>
           <Header />
@@ -44,6 +45,8 @@ export default function RootLayout({
           <div className="fixed bottom-12 right-10">
             <ScrollUpButton />
           </div>
+          {/* フォームフィールド修正スクリプト */}
+          <FormFieldFixer />
         </Provider>
       </body>
     </html>

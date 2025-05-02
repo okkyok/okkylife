@@ -4,12 +4,12 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 
 import { useTheme } from 'next-themes';
-import { Block, ExtendedRecordMap } from 'notion-types';
+import { ExtendedRecordMap } from 'notion-types';
 import { NotionRenderer } from 'react-notion-x';
 
 import CategoryList from '@/components/category-list';
+import { useNotionClient } from '@/hooks/use-notion-client';
 import useMounted from '@/hooks/use-mounted';
-import { mapImageUrl } from '@/libs/notion';
 import '@/styles/notion.css';
 import { Post } from '@/types/post';
 
@@ -22,6 +22,7 @@ export default function NotionPage({
 }) {
   const { theme } = useTheme();
   const mounted = useMounted();
+  const { safeMapImageUrl } = useNotionClient();
 
   return (
     <NotionRenderer
@@ -36,7 +37,7 @@ export default function NotionPage({
           <CategoryList categories={post.categories} />
         </div>
       }
-      mapImageUrl={(url, block) => mapImageUrl(url, block) || ''}
+      mapImageUrl={safeMapImageUrl}
       components={{
         Code,
         Collection,

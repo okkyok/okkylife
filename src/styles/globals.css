@@ -20,6 +20,7 @@
   }
 }
 
+/* 基本スタイル */
 html {
   scroll-behavior: smooth;
 }
@@ -28,4 +29,32 @@ a,
 div,
 button {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* フォームフィールドの修正 */
+/* id/name属性がないinput要素に自動的にdata-id属性を追加 */
+input:not([id]):not([name]) {
+  @apply relative;
+}
+
+input:not([id]):not([name])::before {
+  content: '';
+  display: none;
+}
+
+/* Notionの画像スタイル修正 */
+.notion-collection-card-cover img {
+  object-fit: cover !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 画像プレースホルダー */
+.image-placeholder {
+  background-color: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 0.8rem;
 }

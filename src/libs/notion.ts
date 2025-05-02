@@ -1,10 +1,16 @@
-import { NotionAPI } from 'notion-client';
+// サーバーサイドでのみ実行されるインポート
 import { Block } from 'notion-types';
-import { Client } from '@notionhq/client';
 import {
   BlockObjectResponse,
   PartialBlockObjectResponse
 } from '@notionhq/client/build/src/api-endpoints';
+
+// 必要なモジュールを直接インポート
+import { NotionAPI } from 'notion-client';
+import { Client } from '@notionhq/client';
+
+// クライアントサイドではダミーオブジェクトを使用
+const isServer = typeof window === 'undefined';
 
 // Notion APIのレスポンス型を定義
 type FileObject = {
@@ -37,22 +43,33 @@ type PageBlock = {
   cover?: PageCover;
 };
 
-// 公式Notion APIクライアントの初期化
-const notionClient = new Client({
-  auth: process.env.NOTION_API_KEY,
-});
-
 // キャッシュの型定義
 declare global {
   var __NOTION_FILE_CACHE: Record<string, string> | undefined;
 }
 
-// NotionAPIクライアントの初期化（オプション強化版）
-const notion = new NotionAPI({
-  authToken: process.env.NOTION_AUTH_TOKEN,
-  activeUser: process.env.NOTION_USER_ID, // ユーザーIDがあれば設定
-  userTimeZone: 'Asia/Tokyo', // タイムゾーンを設定
-});
+// サーバーサイドでのみ初期化されるNotionクライアント
+let notionClient: any = null;
+let notion: any = null;
+
+// サーバーサイドでのみ実行
+if (typeof window === 'undefined') {
+  try {
+    // 公式Notion APIクライアントの初期化
+    notionClient = new Client({
+      auth: process.env.NOTION_API_KEY,
+    });
+    
+    // NotionAPIクライアントの初期化（オプション強化版）
+    notion = new NotionAPI({
+      authToken: process.env.NOTION_AUTH_TOKEN,
+      activeUser: process.env.NOTION_USER_ID, // ユーザーIDがあれば設定
+      userTimeZone: 'Asia/Tokyo', // タイムゾーンを設定
+    });
+  } catch (error) {
+    console.error('Failed to initialize Notion clients:', error);
+  }
+}
 
 // メモリキャッシュの型定義
 declare global {
@@ -226,7 +243,7 @@ declare global {
  * 画像URLをマッピングする関数 - 最適化版
  * Notionの画像URLを適切に処理し、Next.jsの画像最適化に対応させる
  */
-export function mapImageUrl(url: string, block: Block): string | null {
+export function mapImageUrl(url: string, block: any = {}): string | null {
   const fallbackImage = '/placeholder-image.jpg';
   
   try {

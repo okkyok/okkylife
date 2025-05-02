@@ -2,12 +2,20 @@ import { getRecordMap, mapImageUrl } from '@/libs/notion';
 import { Post } from '@/types/post';
 import { getBlurImage } from '@/utils/get-blur-image';
 import { Block, RecordMap } from 'notion-types';
-import { Client } from '@notionhq/client';
 
-// Notion APIクライアントの初期化
-const notion = new Client({ 
-  auth: process.env.NOTION_API_KEY,
-});
+// サーバーサイドでのみ実行されるNotionクライアント
+let notion: any = null;
+
+// サーバーサイドでのみ実行
+if (typeof window === 'undefined') {
+  // 動的インポートを使用してクライアントサイドでのエラーを回避
+  const { Client } = require('@notionhq/client');
+  
+  // Notion APIクライアントの初期化
+  notion = new Client({ 
+    auth: process.env.NOTION_API_KEY,
+  });
+}
 
 // Notionプロパティの型定義
 interface DateProperty {
